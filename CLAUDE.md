@@ -4,81 +4,91 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**蚁小二 (Yi Xiaoer)** - A multi-platform social media content management and publishing system. Currently in pre-development stage with only requirements documentation (需求.md).
+**蚁小二 (Yi Xiaoer)** - A multi-platform social media content management and publishing system.
 
-The platform enables users to manage and publish content across 15+ social media platforms (Douyin, Kuaishou, Xiaohongshu, Bilibili, Weibo, YouTube, TikTok, Instagram, etc.) with features for analytics, team collaboration, and asset management.
+MVP scope: Douyin-first, accounts + publish + records only.
 
 ## Technology Stack
 
 ### Frontend
-- React 19.2.3 + TypeScript 5.9.3 + Vite 7.3.1
-- Tailwind CSS 4.0 + Radix UI (headless components)
-- Zustand (state management), React Router v7, TanStack Query v5
-- React Hook Form + Zod (forms/validation), Recharts (charts)
+- React 19 + TypeScript + Vite
+- Tailwind CSS 4.0
+- React Router v7
+- Supabase JS client
 
 ### Backend
-- FastAPI (Python) - chosen for pandas/numpy data analysis, auto OpenAPI docs, cleaner OAuth handling, LangChain ecosystem
+- FastAPI (Python)
 - Supabase (PostgreSQL + Auth + Storage + RLS)
-- APScheduler or Celery (scheduled tasks), httpx (async HTTP), Pydantic (validation)
+- httpx (async HTTP), Pydantic (validation)
 
-## Commands (To Be Implemented)
+## Commands
 
 ```bash
 # Frontend
-npm run dev          # Development server
-npm run build        # Production build
-npm run lint         # ESLint
-npm run type-check   # TypeScript checking
+cd frontend
+npm install
+npm run dev          # http://localhost:5173
 
 # Backend
+cd backend
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload  # Development server
-pytest                                    # Run tests
+python -m uvicorn app.main:app --reload  # http://localhost:8000
+
+# API docs available at http://localhost:8000/docs
 ```
 
-## Architecture
+## Project Structure
 
-### Core Modules
-1. **Dashboard** (`/web/dashboard`) - Quick publish actions, account status, 30-day trends, membership info
-2. **Publish** (`/web/publish`, `/web/tasks`) - Multi-platform publishing with drafts, scheduling, platform-specific settings
-3. **Accounts** (`/web/accounts`) - OAuth-based account binding, grouping, status management
-4. **Analytics** (`/web/overview`) - Account/content stats via official Creator Center APIs (not scraping)
-5. **Team** (`/web/team`) - Role-based access (owner/admin/member), invitations, quotas
-6. **Assets** (`/web/asset-library`) - Media storage via Supabase Storage
-
-### Key Patterns
-- **OAuth Flow**: User authorizes → system stores encrypted tokens → calls platform Creator Center APIs
-- **Data Sync**: Hourly API polling via APScheduler, daily snapshot aggregation
-- **Publishing**: draft → pending → publishing → completed/failed, with per-platform customization
-- **Security**: Token encryption, Supabase RLS for team isolation, API signature verification
-
-### Planned Directory Structure
 ```
-# Frontend (src/)
-components/ui/        # Base UI (Button, Modal, etc.)
-components/layout/    # Sidebar, Header, PageContainer
-pages/               # Dashboard, Publish, Accounts, Overview, Team, Assets, Auth
-stores/              # Zustand state
-services/            # API layer
-types/               # TypeScript definitions
-
-# Backend (app/)
-api/v1/              # auth, teams, accounts, tasks, assets, stats endpoints
-core/                # config, security, supabase client
-services/platforms/  # Per-platform API wrappers (douyin.py, kuaishou.py, etc.)
-jobs/                # Scheduled tasks
+meida-router/
+├── frontend/
+│   └── src/
+│       ├── pages/           # Login, Accounts, Publish, Tasks
+│       ├── components/      # Reusable components
+│       ├── services/api.ts  # Backend API client
+│       └── lib/supabase.ts  # Supabase client
+├── backend/
+│   └── app/
+│       ├── api/             # auth.py, accounts.py, tasks.py
+│       ├── core/            # config.py, supabase.py
+│       ├── models/          # Pydantic schemas
+│       ├── services/        # douyin.py (platform API)
+│       └── main.py          # FastAPI app
+└── supabase/
+    └── migrations/          # SQL setup scripts
 ```
 
-## Platform Integration Notes
+## Key Files
 
-- Each platform requires separate developer account and OAuth app registration
-- Enterprise certification needed for Douyin, Kuaishou
-- Key scopes needed: user_info, video.create, video.data (varies by platform)
-- Token refresh must be handled automatically before expiration
-- Rate limiting varies by platform - implement request throttling
+- `backend/app/api/auth.py` - Douyin OAuth flow
+- `backend/app/api/tasks.py` - Video publishing logic
+- `backend/app/services/douyin.py` - Douyin API wrapper
+- `frontend/src/pages/Publish.tsx` - Video upload and publish UI
+- `supabase/migrations/001_initial_schema.sql` - Database schema
 
-## Database
+## Database Tables
 
-Core tables: `teams`, `team_members`, `social_accounts`, `publish_tasks`, `task_accounts`, `account_stats_daily`, `content_stats`, `assets`, `asset_folders`
+- `social_accounts` - Bound Douyin accounts with tokens
+- `publish_tasks` - Publishing job records
+- `task_accounts` - Per-account publish status
 
-All tables use Supabase RLS policies for team-based data isolation.
+## Setup
+
+1. Create Supabase project at supabase.com
+2. Run `supabase/migrations/001_initial_schema.sql` in SQL Editor
+3. Copy `.env.example` to `.env` in both frontend and backend
+4. Register Douyin developer account at open.douyin.com
+5. Configure OAuth redirect URI: `http://localhost:8000/api/auth/douyin/callback`
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/douyin` | Redirect to Douyin OAuth |
+| GET | `/api/auth/douyin/callback` | OAuth callback handler |
+| GET | `/api/accounts` | List user's accounts |
+| DELETE | `/api/accounts/{id}` | Unbind account |
+| POST | `/api/accounts/{id}/refresh` | Refresh expired token |
+| POST | `/api/tasks` | Create and publish video |
+| GET | `/api/tasks` | List publish records |
+| GET | `/api/tasks/{id}` | Get task details |
