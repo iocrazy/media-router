@@ -1,18 +1,11 @@
 from datetime import datetime
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from app.core.supabase import supabase_admin
+from app.core.auth import get_current_user
 from app.models.schemas import TaskCreate, TaskResponse
 from app.services import douyin
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
-
-
-def get_user_id(request: Request) -> str:
-    """Extract user_id from request."""
-    user_id = request.cookies.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user_id
 
 
 async def publish_to_account(task_id: str, task_account_id: str, account: dict, video_url: str, title: str, description: str | None):
@@ -64,9 +57,8 @@ async def publish_to_account(task_id: str, task_account_id: str, account: dict, 
 
 
 @router.post("", response_model=TaskResponse)
-async def create_task(data: TaskCreate, request: Request, background_tasks: BackgroundTasks):
+async def create_task(data: TaskCreate, background_tasks: BackgroundTasks, user_id: str = Depends(get_current_user)):
     """Create a new publish task and start publishing."""
-    user_id = get_user_id(request)
 
     # Validate accounts belong to user
     accounts_result = supabase_admin.table("social_accounts").select("*").eq(
@@ -138,9 +130,8 @@ async def create_task(data: TaskCreate, request: Request, background_tasks: Back
 
 
 @router.get("", response_model=list[TaskResponse])
-async def list_tasks(request: Request):
+async def list_tasks(user_id: str = Depends(get_current_user)):
     """Get all tasks for the current user."""
-    user_id = get_user_id(request)
 
     # Get tasks
     tasks_result = supabase_admin.table("publish_tasks").select("*").eq(
@@ -182,9 +173,8 @@ async def list_tasks(request: Request):
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str, request: Request):
+async def get_task(task_id: str, user_id: str = Depends(get_current_user)):
     """Get a single task with its accounts."""
-    user_id = get_user_id(request)
 
     # Get task
     task_result = supabase_admin.table("publish_tasks").select("*").eq(

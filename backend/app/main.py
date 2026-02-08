@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.api import auth, accounts, tasks
 
 app = FastAPI(
-    title="蚁小二 API",
+    title="MediaHub API",
     description="社交媒体内容管理和发布系统",
     version="1.0.0",
 )
@@ -12,7 +12,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=[settings.FRONTEND_URL, "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,7 +26,7 @@ app.include_router(tasks.router)
 
 @app.get("/")
 async def root():
-    return {"message": "蚁小二 API", "docs": "/docs"}
+    return {"message": "MediaHub API", "docs": "/docs"}
 
 
 @app.get("/health")

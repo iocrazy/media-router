@@ -1,9 +1,9 @@
 import secrets
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
-from app.core.supabase import supabase_admin
+from app.core.supabase import supabase_admin, supabase
 from app.services import douyin
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -13,12 +13,16 @@ oauth_states: dict[str, dict] = {}
 
 
 @router.get("/douyin")
-async def douyin_auth(request: Request):
+async def douyin_auth(token: str = Query(..., description="Supabase access token")):
     """Redirect to Douyin OAuth page."""
-    # Get user from session/cookie (simplified - in production use proper auth)
-    user_id = request.cookies.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    # Verify token and get user_id
+    try:
+        response = supabase.auth.get_user(token)
+        if response.user is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user_id = response.user.id
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
@@ -32,12 +36,20 @@ async def douyin_auth(request: Request):
 
 
 @router.get("/douyin/callback")
-async def douyin_callback(code: str, state: str):
+async def douyin_callback(code: str, state: str = ""):
     """Handle Douyin OAuth callback."""
     # Validate state
+    if not state:
+        # state is empty — user likely authorized via direct URL, not through the app
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/accounts?error=请通过应用内「绑定抖音账号」按钮进行授权"
+        )
+
     state_data = oauth_states.pop(state, None)
     if not state_data:
-        raise HTTPException(status_code=400, detail="Invalid state")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/accounts?error=授权已过期，请重新绑定"
+        )
 
     # Check state expiry (10 minutes)
     if datetime.now() - state_data["created_at"] > timedelta(minutes=10):

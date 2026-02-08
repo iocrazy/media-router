@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabase'
-import { Session } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js'
 import Login from './pages/Login'
 import Accounts from './pages/Accounts'
 import Publish from './pages/Publish'
@@ -27,7 +27,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex justify-between h-14">
             <div className="flex items-center gap-8">
               <Link to="/accounts" className="font-bold text-lg">
-                蚁小二
+                MediaHub
               </Link>
               <div className="flex gap-4">
                 {navItems.map((item) => (

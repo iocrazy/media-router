@@ -1,24 +1,16 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase import supabase_admin
+from app.core.auth import get_current_user
 from app.models.schemas import AccountResponse
 from app.services import douyin
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 
-def get_user_id(request: Request) -> str:
-    """Extract user_id from request (simplified - use proper auth in production)."""
-    user_id = request.cookies.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user_id
-
-
 @router.get("", response_model=list[AccountResponse])
-async def list_accounts(request: Request):
+async def list_accounts(user_id: str = Depends(get_current_user)):
     """Get all accounts for the current user."""
-    user_id = get_user_id(request)
 
     result = supabase_admin.table("social_accounts").select(
         "id, platform, platform_user_id, username, avatar_url, status, created_at"
@@ -28,9 +20,8 @@ async def list_accounts(request: Request):
 
 
 @router.delete("/{account_id}")
-async def delete_account(account_id: str, request: Request):
+async def delete_account(account_id: str, user_id: str = Depends(get_current_user)):
     """Delete (unbind) an account."""
-    user_id = get_user_id(request)
 
     # Verify ownership
     result = supabase_admin.table("social_accounts").select("id").eq(
@@ -46,9 +37,8 @@ async def delete_account(account_id: str, request: Request):
 
 
 @router.post("/{account_id}/refresh", response_model=AccountResponse)
-async def refresh_account(account_id: str, request: Request):
+async def refresh_account(account_id: str, user_id: str = Depends(get_current_user)):
     """Refresh expired account token."""
-    user_id = get_user_id(request)
 
     # Get account with refresh token
     result = supabase_admin.table("social_accounts").select("*").eq(

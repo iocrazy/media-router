@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { api, Account } from '../services/api'
+import { api } from '../services/api'
+import type { Account } from '../services/api'
 
 export default function Publish() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -12,7 +13,6 @@ export default function Publish() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
@@ -55,11 +55,7 @@ export default function Publish() {
       const fileName = `${Date.now()}-${videoFile.name}`
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('videos')
-        .upload(fileName, videoFile, {
-          onUploadProgress: (progress) => {
-            setUploadProgress(Math.round((progress.loaded / progress.total) * 100))
-          },
-        })
+        .upload(fileName, videoFile)
 
       if (uploadError) throw uploadError
 
@@ -199,14 +195,9 @@ export default function Publish() {
       {uploading && (
         <div className="mb-4">
           <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 transition-all"
-              style={{ width: `${uploadProgress}%` }}
-            />
+            <div className="h-full bg-blue-600 animate-pulse w-full" />
           </div>
-          <p className="text-sm text-gray-500 mt-1">
-            上传中... {uploadProgress}%
-          </p>
+          <p className="text-sm text-gray-500 mt-1">上传中...</p>
         </div>
       )}
 

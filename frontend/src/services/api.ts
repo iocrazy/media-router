@@ -1,13 +1,22 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { supabase } from '../lib/supabase'
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8599'
+
+async function getAccessToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = await getAccessToken()
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options?.headers,
     },
-    credentials: 'include',
   })
 
   if (!response.ok) {
@@ -52,7 +61,10 @@ export interface Task {
 // API functions
 export const api = {
   // Auth
-  getDouyinAuthUrl: () => `${API_BASE}/api/auth/douyin`,
+  getDouyinAuthUrl: async () => {
+    const token = await getAccessToken()
+    return `${API_BASE}/api/auth/douyin?token=${token}`
+  },
 
   // Accounts
   getAccounts: () => request<Account[]>('/api/accounts'),

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { api, Account } from '../services/api'
+import { api } from '../services/api'
+import type { Account } from '../services/api'
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -18,11 +19,20 @@ export default function Accounts() {
   }
 
   useEffect(() => {
+    // Check for error from OAuth callback redirect
+    const params = new URLSearchParams(window.location.search)
+    const urlError = params.get('error')
+    if (urlError) {
+      setError(decodeURIComponent(urlError))
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
     fetchAccounts()
   }, [])
 
-  const handleAddDouyin = () => {
-    window.location.href = api.getDouyinAuthUrl()
+  const handleAddDouyin = async () => {
+    const url = await api.getDouyinAuthUrl()
+    window.location.href = url
   }
 
   const handleDelete = async (id: string) => {

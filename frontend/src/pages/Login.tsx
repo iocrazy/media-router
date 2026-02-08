@@ -35,7 +35,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center mb-8">蚁小二</h1>
+        <h1 className="text-2xl font-bold text-center mb-8">MediaHub</h1>
         <h2 className="text-lg text-center text-gray-600 mb-6">
           {isSignUp ? '注册账号' : '登录'}
         </h2>
