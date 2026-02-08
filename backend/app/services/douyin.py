@@ -16,7 +16,7 @@ def get_auth_url(state: str) -> str:
         f"{DOUYIN_AUTH_URL}"
         f"?client_key={settings.DOUYIN_CLIENT_KEY}"
         f"&response_type=code"
-        f"&scope=trial.whitelist"
+        f"&scope=trial.whitelist,user_info"
         f"&redirect_uri={settings.DOUYIN_REDIRECT_URI}"
         f"&state={state}"
     )
