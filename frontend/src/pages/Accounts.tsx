@@ -20,14 +20,14 @@ function AccountCard({
   const isActive = account.status === 'active'
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 w-56 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 w-52 overflow-hidden hover:shadow-md transition-shadow">
       {/* Status badge */}
       <div className="flex justify-end p-3 pb-0">
         <span
-          className={`text-xs px-2 py-0.5 rounded ${
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
             isActive
-              ? 'bg-green-50 text-green-600 border border-green-200'
-              : 'bg-gray-100 text-gray-500 border border-gray-200'
+              ? 'bg-green-50 text-green-600'
+              : 'bg-red-50 text-red-500'
           }`}
         >
           {isActive ? '正常' : '已失效'}
@@ -35,20 +35,20 @@ function AccountCard({
       </div>
 
       {/* Avatar + Info */}
-      <div className="flex flex-col items-center px-4 pb-4">
+      <div className="flex flex-col items-center px-4 pt-1 pb-4">
         <div className="relative">
           <img
             src={account.avatar_url || '/default-avatar.png'}
             alt={account.username}
-            className="w-16 h-16 rounded-full bg-gray-200 object-cover"
+            className="w-16 h-16 rounded-full bg-gray-100 object-cover ring-2 ring-gray-100"
           />
           <div className="absolute -bottom-1 -right-1 bg-black text-white rounded-full p-0.5">
             <DouyinIcon />
           </div>
         </div>
 
-        <p className="mt-3 font-semibold text-gray-900">{account.username}</p>
-        <p className="text-xs text-gray-400 mt-0.5">@{account.platform_user_id}</p>
+        <p className="mt-3 font-semibold text-gray-900 text-sm">{account.username}</p>
+        <p className="text-xs text-gray-400 mt-1">抖音账号</p>
       </div>
 
       {/* Divider */}
@@ -56,26 +56,38 @@ function AccountCard({
 
       {/* Actions */}
       <div className="flex divide-x divide-gray-100">
-        {!isActive && (
+        {!isActive ? (
+          <>
+            <button
+              onClick={() => onRefresh(account.id)}
+              className="flex-1 flex items-center justify-center gap-1 py-2.5 text-xs text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新登录
+            </button>
+            <button
+              onClick={() => onDelete(account.id)}
+              className="flex-1 flex items-center justify-center gap-1 py-2.5 text-xs text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              删除
+            </button>
+          </>
+        ) : (
           <button
-            onClick={() => onRefresh(account.id)}
-            className="flex-1 flex items-center justify-center gap-1 py-2.5 text-xs text-blue-600 hover:bg-blue-50 transition-colors"
+            onClick={() => onDelete(account.id)}
+            className="flex-1 flex items-center justify-center gap-1 py-2.5 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            重新登录
+            删除
           </button>
         )}
-        <button
-          onClick={() => onDelete(account.id)}
-          className="flex-1 flex items-center justify-center gap-1 py-2.5 text-xs text-red-500 hover:bg-red-50 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          删除
-        </button>
       </div>
     </div>
   )
