@@ -57,6 +57,16 @@ function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
+      <footer className="text-center py-4 text-xs text-gray-400">
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-gray-500"
+        >
+          苏ICP备2024107866号
+        </a>
+      </footer>
     </div>
   )
 }

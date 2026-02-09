@@ -91,6 +91,16 @@ export default function Login() {
           </button>
         </p>
       </div>
+      <div className="mt-8 text-center text-xs text-gray-400">
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-gray-500"
+        >
+          苏ICP备2024107866号
+        </a>
+      </div>
     </div>
   )
 }
