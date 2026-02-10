@@ -25,3 +25,19 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+.vercel
+
+# Android
+frontend/android/app/build/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/mediahub.keystore
+frontend/build-tools/
+frontend/platform-tools/
+frontend/platforms/
+frontend/licenses/
+*.apk
+*.keystore
+
+# Icons preview
+icon-preview.png
