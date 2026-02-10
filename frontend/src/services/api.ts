@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8599'
+const API_BASE = import.meta.env.VITE_API_URL || 'https://media.heytime.cc'
 
 async function getAccessToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession()
