@@ -2,7 +2,129 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../services/api'
-import type { Account } from '../services/api'
+import type { Account, Task } from '../services/api'
+
+function SharePanel({ task }: { task: Task }) {
+  const [schemaUrl, setSchemaUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    api.getShareSchema(task.id).then((res) => {
+      setSchemaUrl(res.schema_url)
+    }).catch((err) => {
+      console.error('Failed to get share schema:', err)
+    }).finally(() => setLoading(false))
+  }, [task.id])
+
+  const handleOpenDouyin = () => {
+    if (schemaUrl) {
+      window.location.href = schemaUrl
+    }
+  }
+
+  const handleCopy = async () => {
+    if (!schemaUrl) return
+    try {
+      await navigator.clipboard.writeText(schemaUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback for older browsers
+      const input = document.createElement('input')
+      input.value = schemaUrl
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      document.body.removeChild(input)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">正在生成分享链接...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center mb-6">
+        <div className="text-4xl mb-3">✅</div>
+        <h2 className="text-lg font-bold text-green-800 mb-1">任务创建成功</h2>
+        <p className="text-sm text-green-600">
+          请使用抖音完成发布
+        </p>
+      </div>
+
+      {schemaUrl && (
+        <div className="bg-white border rounded-lg p-6 mb-6">
+          <h3 className="font-medium mb-4 text-center">发布到抖音</h3>
+
+          {/* Mobile: Direct open button */}
+          <button
+            onClick={handleOpenDouyin}
+            className="w-full py-3 bg-black text-white rounded-lg font-medium mb-3 active:bg-gray-800"
+          >
+            打开抖音发布
+          </button>
+
+          <p className="text-xs text-gray-400 text-center mb-4">
+            点击后将跳转到抖音 App 的发布页，视频和标题已自动填入
+          </p>
+
+          {/* Desktop fallback: Copy link */}
+          <div className="border-t pt-4">
+            <p className="text-xs text-gray-500 mb-2">
+              如果无法自动跳转，请复制以下链接在手机浏览器中打开：
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={schemaUrl}
+                readOnly
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 truncate"
+              />
+              <button
+                onClick={handleCopy}
+                className="px-3 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50 shrink-0"
+              >
+                {copied ? '已复制' : '复制'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!schemaUrl && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <p className="text-sm text-yellow-800">
+            无法生成分享链接，请在发布记录页手动重试
+          </p>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => navigate('/tasks')}
+          className="flex-1 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+        >
+          查看发布记录
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          继续发布
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Publish() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -13,8 +135,11 @@ export default function Publish() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [isScheduled, setIsScheduled] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [scheduledTime, setScheduledTime] = useState('')
+  const [createdTask, setCreatedTask] = useState<Task | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const navigate = useNavigate()
 
   useEffect(() => {
     api.getAccounts().then(setAccounts).catch(console.error)
@@ -43,9 +168,27 @@ export default function Publish() {
     )
   }
 
+  const getScheduledISOString = (): string | undefined => {
+    if (!isScheduled || !scheduledDate || !scheduledTime) return undefined
+    const localDate = new Date(`${scheduledDate}T${scheduledTime}`)
+    return localDate.toISOString()
+  }
+
+  const isScheduleValid = (): boolean => {
+    if (!isScheduled) return true
+    if (!scheduledDate || !scheduledTime) return false
+    const scheduled = new Date(`${scheduledDate}T${scheduledTime}`)
+    return scheduled.getTime() > Date.now()
+  }
+
   const handlePublish = async () => {
     if (!videoFile || !title || selectedIds.length === 0) {
       alert('请填写完整信息')
+      return
+    }
+
+    if (isScheduled && !isScheduleValid()) {
+      alert('定时发布时间必须晚于当前时间')
       return
     }
 
@@ -73,18 +216,38 @@ export default function Publish() {
         description,
         video_url: urlData.publicUrl,
         account_ids: selectedIds,
+        scheduled_at: getScheduledISOString(),
       })
 
-      navigate(`/tasks?highlight=${task.id}`)
+      // 3. Show share panel (for H5 share flow)
+      setCreatedTask(task)
     } catch (err) {
-      alert(err instanceof Error ? err.message : '发布失败')
+      alert(err instanceof Error ? err.message : '创建失败')
     } finally {
       setUploading(false)
       setPublishing(false)
     }
   }
 
+  // If task was created, show share panel
+  if (createdTask) {
+    return <SharePanel task={createdTask} />
+  }
+
   const activeAccounts = accounts.filter((a) => a.status === 'active')
+
+  // Set default scheduled time to 1 hour from now
+  const handleScheduleToggle = (scheduled: boolean) => {
+    setIsScheduled(scheduled)
+    if (scheduled && !scheduledDate) {
+      const now = new Date(Date.now() + 60 * 60 * 1000)
+      setScheduledDate(now.toISOString().split('T')[0])
+      setScheduledTime(now.toTimeString().slice(0, 5))
+    }
+  }
+
+  // Min date for the date picker (today)
+  const today = new Date().toISOString().split('T')[0]
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -191,6 +354,66 @@ export default function Publish() {
         )}
       </div>
 
+      {/* Publish Mode Toggle */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          发布方式
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => handleScheduleToggle(false)}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              !isScheduled
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            立即发布
+          </button>
+          <button
+            type="button"
+            onClick={() => handleScheduleToggle(true)}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              isScheduled
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            定时发布
+          </button>
+        </div>
+      </div>
+
+      {/* Schedule DateTime Picker */}
+      {isScheduled && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <label className="block text-sm font-medium text-blue-800 mb-2">
+            选择发布时间
+          </label>
+          <div className="flex gap-3">
+            <input
+              type="date"
+              value={scheduledDate}
+              min={today}
+              onChange={(e) => setScheduledDate(e.target.value)}
+              className="flex-1 px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+            <input
+              type="time"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              className="flex-1 px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            />
+          </div>
+          {scheduledDate && scheduledTime && !isScheduleValid() && (
+            <p className="text-red-500 text-xs mt-2">
+              定时发布时间必须晚于当前时间
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Upload Progress */}
       {uploading && (
         <div className="mb-4">
@@ -204,10 +427,23 @@ export default function Publish() {
       {/* Submit Button */}
       <button
         onClick={handlePublish}
-        disabled={uploading || publishing || !videoFile || !title || selectedIds.length === 0}
+        disabled={
+          uploading ||
+          publishing ||
+          !videoFile ||
+          !title ||
+          selectedIds.length === 0 ||
+          (isScheduled && !isScheduleValid())
+        }
         className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {uploading ? '上传中...' : publishing ? '发布中...' : '发布到选中账号'}
+        {uploading
+          ? '上传中...'
+          : publishing
+            ? '提交中...'
+            : isScheduled
+              ? '设置定时发布'
+              : '创建发布任务'}
       </button>
     </div>
   )

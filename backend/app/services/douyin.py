@@ -1,6 +1,15 @@
-import httpx
+import hashlib
+import logging
+import secrets
+import time
 from typing import Optional
+from urllib.parse import quote
+
+import httpx
+
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 DOUYIN_AUTH_URL = "https://open.douyin.com/platform/oauth/connect/"
 DOUYIN_TOKEN_URL = "https://open.douyin.com/oauth/access_token/"
@@ -8,6 +17,101 @@ DOUYIN_REFRESH_URL = "https://open.douyin.com/oauth/refresh_token/"
 DOUYIN_USER_URL = "https://open.douyin.com/oauth/userinfo/"
 DOUYIN_VIDEO_CREATE_URL = "https://open.douyin.com/api/douyin/v1/video/create/"
 DOUYIN_VIDEO_UPLOAD_URL = "https://open.douyin.com/api/douyin/v1/video/upload/"
+DOUYIN_CLIENT_TOKEN_URL = "https://open.douyin.com/oauth/client_token/"
+DOUYIN_TICKET_URL = "https://open.douyin.com/open/getticket/"
+
+# ── H5 Share: token/ticket cache ──────────────────────────────
+_client_token_cache: dict = {"token": None, "expires_at": 0}
+_ticket_cache: dict = {"ticket": None, "expires_at": 0}
+
+
+async def get_client_token() -> str:
+    """Get client_token (cached, auto-refresh)."""
+    now = time.time()
+    if _client_token_cache["token"] and now < _client_token_cache["expires_at"] - 60:
+        return _client_token_cache["token"]
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            DOUYIN_CLIENT_TOKEN_URL,
+            json={
+                "client_key": settings.DOUYIN_CLIENT_KEY,
+                "client_secret": settings.DOUYIN_CLIENT_SECRET,
+                "grant_type": "client_credential",
+            },
+        )
+        data = response.json()
+        if data.get("data", {}).get("error_code", 0) != 0:
+            raise Exception(data.get("data", {}).get("description", "Failed to get client_token"))
+
+        token = data["data"]["access_token"]
+        expires_in = data["data"]["expires_in"]
+        _client_token_cache["token"] = token
+        _client_token_cache["expires_at"] = now + expires_in
+        logger.info("Douyin client_token refreshed, expires_in=%d", expires_in)
+        return token
+
+
+async def get_ticket() -> str:
+    """Get jsapi ticket for H5 share signature (cached, valid 2h)."""
+    now = time.time()
+    if _ticket_cache["ticket"] and now < _ticket_cache["expires_at"] - 60:
+        return _ticket_cache["ticket"]
+
+    client_token = await get_client_token()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            DOUYIN_TICKET_URL,
+            params={"access_token": client_token},
+        )
+        data = response.json()
+        if data.get("data", {}).get("error_code", 0) != 0:
+            raise Exception(data.get("data", {}).get("description", "Failed to get ticket"))
+
+        ticket = data["data"]["ticket"]
+        expires_in = data["data"]["expires_in"]
+        _ticket_cache["ticket"] = ticket
+        _ticket_cache["expires_at"] = now + expires_in
+        logger.info("Douyin ticket refreshed, expires_in=%d", expires_in)
+        return ticket
+
+
+def _generate_signature(ticket: str, timestamp: int, nonce_str: str) -> str:
+    """Generate MD5 signature for H5 share Schema URL."""
+    # Parameters sorted by key in ASCII order
+    sign_str = f"nonce_str={nonce_str}&ticket={ticket}&timestamp={timestamp}"
+    return hashlib.md5(sign_str.encode()).hexdigest()
+
+
+async def generate_share_schema(
+    video_url: str,
+    title: str,
+    share_id: str,
+    hashtag_list: str = "",
+) -> str:
+    """
+    Generate the Schema URL for H5 share to Douyin.
+    User scans QR code or taps link → Douyin app opens → publish page with content pre-filled.
+    """
+    ticket = await get_ticket()
+    timestamp = int(time.time())
+    nonce_str = secrets.token_hex(16)
+    signature = _generate_signature(ticket, timestamp, nonce_str)
+
+    params = {
+        "client_key": settings.DOUYIN_CLIENT_KEY,
+        "nonce_str": nonce_str,
+        "timestamp": str(timestamp),
+        "signature": signature,
+        "state": share_id,
+        "video_url": video_url,
+        "title": title,
+    }
+    if hashtag_list:
+        params["hashtag_list"] = hashtag_list
+
+    query = "&".join(f"{k}={quote(str(v), safe='')}" for k, v in params.items())
+    return f"snssdk1128://openplatform/share?{query}"
 
 
 def get_auth_url(state: str) -> str:

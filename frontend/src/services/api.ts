@@ -53,9 +53,16 @@ export interface Task {
   title: string
   description: string | null
   video_url: string
-  status: 'publishing' | 'completed' | 'failed'
+  status: 'pending_share' | 'scheduled' | 'publishing' | 'completed' | 'failed' | 'cancelled'
+  scheduled_at: string | null
+  share_id: string | null
   created_at: string
   accounts: TaskAccount[]
+}
+
+export interface ShareSchema {
+  schema_url: string
+  share_id: string
 }
 
 // API functions
@@ -85,5 +92,13 @@ export const api = {
     description?: string
     video_url: string
     account_ids: string[]
+    scheduled_at?: string
   }) => request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
+
+  cancelTask: (id: string) =>
+    request<Task>(`/api/tasks/${id}/cancel`, { method: 'POST' }),
+
+  // Share
+  getShareSchema: (taskId: string) =>
+    request<ShareSchema>(`/api/share/douyin/${taskId}`),
 }

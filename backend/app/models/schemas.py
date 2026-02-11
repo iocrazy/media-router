@@ -26,6 +26,7 @@ class TaskCreate(BaseModel):
     description: Optional[str] = None
     video_url: str
     account_ids: list[str]
+    scheduled_at: Optional[datetime] = None
 
 
 class TaskAccountResponse(BaseModel):
@@ -43,8 +44,16 @@ class TaskResponse(BaseModel):
     description: Optional[str] = None
     video_url: str
     status: str
+    scheduled_at: Optional[datetime] = None
+    share_id: Optional[str] = None
     created_at: datetime
     accounts: list[TaskAccountResponse]
 
     class Config:
         from_attributes = True
+
+
+# Share schemas
+class ShareSchemaResponse(BaseModel):
+    schema_url: str
+    share_id: str

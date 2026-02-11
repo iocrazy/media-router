@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from app.core.supabase import supabase_admin
 from app.core.auth import get_current_user
@@ -57,8 +57,8 @@ async def publish_to_account(task_id: str, task_account_id: str, account: dict, 
 
 
 @router.post("", response_model=TaskResponse)
-async def create_task(data: TaskCreate, background_tasks: BackgroundTasks, user_id: str = Depends(get_current_user)):
-    """Create a new publish task and start publishing."""
+async def create_task(data: TaskCreate, user_id: str = Depends(get_current_user)):
+    """Create a new publish task (H5 share flow)."""
 
     # Validate accounts belong to user
     accounts_result = supabase_admin.table("social_accounts").select("*").eq(
@@ -76,14 +76,27 @@ async def create_task(data: TaskCreate, background_tasks: BackgroundTasks, user_
                 detail=f"Account {account['username']} is not active"
             )
 
+    # Determine status: scheduled > pending_share (H5 share flow)
+    is_scheduled = data.scheduled_at is not None
+    initial_status = "scheduled" if is_scheduled else "pending_share"
+
+    # Generate share_id for H5 share tracking
+    import secrets as _secrets
+    share_id = _secrets.token_urlsafe(16)
+
     # Create publish task
-    task_result = supabase_admin.table("publish_tasks").insert({
+    task_data = {
         "user_id": user_id,
         "title": data.title,
         "description": data.description,
         "video_url": data.video_url,
-        "status": "publishing",
-    }).execute()
+        "status": initial_status,
+        "share_id": share_id,
+    }
+    if is_scheduled:
+        task_data["scheduled_at"] = data.scheduled_at.isoformat()
+
+    task_result = supabase_admin.table("publish_tasks").insert(task_data).execute()
 
     task = task_result.data[0]
     task_id = task["id"]
@@ -102,17 +115,6 @@ async def create_task(data: TaskCreate, background_tasks: BackgroundTasks, user_
             "avatar_url": account["avatar_url"],
         })
 
-        # Schedule background publishing for each account
-        background_tasks.add_task(
-            publish_to_account,
-            task_id,
-            ta_result.data[0]["id"],
-            account,
-            data.video_url,
-            data.title,
-            data.description,
-        )
-
     return {
         **task,
         "accounts": [
@@ -127,6 +129,53 @@ async def create_task(data: TaskCreate, background_tasks: BackgroundTasks, user_
             for ta in task_accounts
         ],
     }
+
+
+@router.post("/{task_id}/cancel", response_model=TaskResponse)
+async def cancel_task(task_id: str, user_id: str = Depends(get_current_user)):
+    """Cancel a scheduled or pending_share task."""
+
+    # Get task and verify ownership
+    task_result = supabase_admin.table("publish_tasks").select("*").eq(
+        "id", task_id
+    ).eq("user_id", user_id).execute()
+
+    if not task_result.data:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    task = task_result.data[0]
+
+    if task["status"] not in ("scheduled", "pending_share"):
+        raise HTTPException(status_code=400, detail="Only scheduled or pending tasks can be cancelled")
+
+    # Update task status to cancelled
+    supabase_admin.table("publish_tasks").update({
+        "status": "cancelled",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", task_id).execute()
+
+    # Get updated task with accounts
+    updated_task = supabase_admin.table("publish_tasks").select("*").eq(
+        "id", task_id
+    ).execute()
+
+    task_accounts_result = supabase_admin.table("task_accounts").select(
+        "*, social_accounts(username, avatar_url)"
+    ).eq("task_id", task_id).execute()
+
+    accounts = [
+        {
+            "account_id": ta["account_id"],
+            "username": ta["social_accounts"]["username"] if ta.get("social_accounts") else "Unknown",
+            "avatar_url": ta["social_accounts"]["avatar_url"] if ta.get("social_accounts") else None,
+            "status": ta["status"],
+            "error_message": ta.get("error_message"),
+            "published_url": ta.get("published_url"),
+        }
+        for ta in task_accounts_result.data
+    ]
+
+    return {**updated_task.data[0], "accounts": accounts}
 
 
 @router.get("", response_model=list[TaskResponse])

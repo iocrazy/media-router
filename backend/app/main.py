@@ -1,12 +1,23 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api import auth, accounts, tasks
+from app.core.scheduler import start_scheduler, stop_scheduler
+from app.api import auth, accounts, tasks, share
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    stop_scheduler()
+
 
 app = FastAPI(
     title="MediaHub API",
     description="社交媒体内容管理和发布系统",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS
@@ -22,6 +33,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(tasks.router)
+app.include_router(share.router)
 
 
 @app.get("/")
