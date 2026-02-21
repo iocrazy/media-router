@@ -61,13 +61,8 @@ function VideoUpload({ videoFiles, onVideoFilesChange }: {
       const vf = newFiles[i]
       try {
         const url = await uploadFile(vf.file, 'videos')
-        onVideoFilesChange((prev) => {
-          void prev
-          return merged.map((f) =>
-            f === vf ? { ...f, url, uploading: false } : f
-          )
-        })
         merged[videoFiles.length + i] = { ...vf, url, uploading: false }
+        onVideoFilesChange([...merged])
       } catch {
         merged[videoFiles.length + i] = { ...vf, url: null, uploading: false }
         onVideoFilesChange([...merged])
