@@ -20,6 +20,10 @@ def get_all_platforms() -> list[str]:
 
 def _register_all():
     from app.services.platforms.douyin import DouyinAdapter
+    from app.services.platforms.kuaishou import KuaishouAdapter
+    from app.services.platforms.xiaohongshu import XiaohongshuAdapter
     register(DouyinAdapter())
+    register(KuaishouAdapter())
+    register(XiaohongshuAdapter())
 
 _register_all()
