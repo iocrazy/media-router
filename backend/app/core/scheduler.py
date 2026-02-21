@@ -37,6 +37,19 @@ async def execute_scheduled_tasks():
 
             logger.info(f"Executing scheduled task {task_id}: {task['title']}")
 
+            # Non-video tasks: mark completed directly (placeholder until API permissions granted)
+            content_type = task.get("content_type", "video")
+            if content_type != "video":
+                supabase_admin.table("publish_tasks").update({
+                    "status": "completed",
+                    "updated_at": now,
+                }).eq("id", task_id).execute()
+                supabase_admin.table("task_accounts").update({
+                    "status": "success",
+                }).eq("task_id", task_id).execute()
+                logger.info(f"Non-video task {task_id} ({content_type}) marked completed (placeholder)")
+                continue
+
             # Get task accounts
             task_accounts = supabase_admin.table("task_accounts").select(
                 "*, social_accounts(*)"

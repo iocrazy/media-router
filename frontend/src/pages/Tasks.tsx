@@ -131,6 +131,19 @@ export default function Tasks() {
     })
   }
 
+  const getContentTypeLabel = (type: string) => {
+    switch (type) {
+      case 'video':
+        return { text: '视频', color: 'bg-purple-100 text-purple-700' }
+      case 'image_text':
+        return { text: '图文', color: 'bg-teal-100 text-teal-700' }
+      case 'article':
+        return { text: '文章', color: 'bg-amber-100 text-amber-700' }
+      default:
+        return { text: type, color: 'bg-gray-100 text-gray-700' }
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
@@ -226,8 +239,16 @@ export default function Tasks() {
             <div key={task.id} className={getTaskCardClass(task)}>
               <div className="flex justify-between items-start mb-3">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-medium">{task.title}</h3>
+                    {(() => {
+                      const ct = getContentTypeLabel(task.content_type || 'video')
+                      return (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${ct.color}`}>
+                          {ct.text}
+                        </span>
+                      )
+                    })()}
                     {task.status === 'pending_share' && (
                       <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
                         待分享
@@ -251,7 +272,7 @@ export default function Tasks() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {task.status === 'pending_share' && (
+                  {task.status === 'pending_share' && (task.content_type || 'video') === 'video' && (
                     <ShareButton taskId={task.id} />
                   )}
                   {task.status === 'scheduled' && (
@@ -270,7 +291,7 @@ export default function Tasks() {
               </div>
 
               {/* Pending share hint */}
-              {task.status === 'pending_share' && (
+              {task.status === 'pending_share' && (task.content_type || 'video') === 'video' && (
                 <div className="mb-3 p-2 bg-orange-100 rounded text-sm text-orange-800">
                   请点击「打开抖音发布」按钮，在抖音 App 中确认发布
                 </div>

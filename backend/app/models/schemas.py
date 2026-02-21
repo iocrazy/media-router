@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 
 # Account schemas
@@ -21,12 +21,28 @@ class AccountResponse(AccountBase):
 
 
 # Task schemas
+ContentType = Literal["video", "image_text", "article"]
+
+
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    video_url: str
+    content_type: ContentType = "video"
+    video_url: Optional[str] = None
+    image_urls: list[str] = []
+    article_content: Optional[str] = None
     account_ids: list[str]
     scheduled_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def validate_content(self):
+        if self.content_type == "video" and not self.video_url:
+            raise ValueError("video_url is required for video content")
+        if self.content_type == "image_text" and not self.image_urls:
+            raise ValueError("image_urls is required for image_text content")
+        if self.content_type == "article" and not self.article_content:
+            raise ValueError("article_content is required for article content")
+        return self
 
 
 class TaskAccountResponse(BaseModel):
@@ -42,7 +58,10 @@ class TaskResponse(BaseModel):
     id: str
     title: str
     description: Optional[str] = None
-    video_url: str
+    content_type: ContentType = "video"
+    video_url: Optional[str] = None
+    image_urls: list[str] = []
+    article_content: Optional[str] = None
     status: str
     scheduled_at: Optional[datetime] = None
     share_id: Optional[str] = None

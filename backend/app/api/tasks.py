@@ -89,7 +89,10 @@ async def create_task(data: TaskCreate, user_id: str = Depends(get_current_user)
         "user_id": user_id,
         "title": data.title,
         "description": data.description,
+        "content_type": data.content_type,
         "video_url": data.video_url,
+        "image_urls": data.image_urls,
+        "article_content": data.article_content,
         "status": initial_status,
         "share_id": share_id,
     }

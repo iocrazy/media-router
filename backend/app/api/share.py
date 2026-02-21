@@ -28,6 +28,9 @@ async def get_share_schema(task_id: str, user_id: str = Depends(get_current_user
 
     task = task_result.data[0]
 
+    if task.get("content_type", "video") != "video":
+        raise HTTPException(status_code=400, detail="Share schema is only available for video tasks")
+
     if task["status"] not in ("pending_share", "scheduled"):
         raise HTTPException(status_code=400, detail="Task is not in a shareable state")
 

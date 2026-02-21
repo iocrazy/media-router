@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../services/api'
-import type { Account, Task } from '../services/api'
+import type { Account, Task, ContentType } from '../services/api'
 import { getPlatform } from '../config/platforms'
 
 function SharePanel({ task }: { task: Task }) {
@@ -127,26 +127,76 @@ function SharePanel({ task }: { task: Task }) {
   )
 }
 
+function SuccessPanel({ task }: { task: Task }) {
+  const navigate = useNavigate()
+
+  const typeLabel = task.content_type === 'image_text' ? '图文' : '文章'
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center mb-6">
+        <div className="text-4xl mb-3">✅</div>
+        <h2 className="text-lg font-bold text-green-800 mb-1">{typeLabel}任务创建成功</h2>
+        <p className="text-sm text-green-600">
+          {task.scheduled_at ? '任务将在预定时间发布' : '任务已提交，等待发布'}
+        </p>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => navigate('/tasks')}
+          className="flex-1 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+        >
+          查看发布记录
+        </button>
+        <button
+          onClick={() => window.location.reload()}
+          className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          继续发布
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const CONTENT_TYPES: { type: ContentType; label: string; desc: string; icon: string }[] = [
+  { type: 'video', label: '视频', desc: '上传视频文件发布', icon: '🎬' },
+  { type: 'image_text', label: '图文', desc: '上传图片配文字发布', icon: '🖼️' },
+  { type: 'article', label: '文章', desc: '撰写图文文章发布', icon: '📝' },
+]
+
 export default function Publish() {
+  const [step, setStep] = useState<'select' | 'form'>('select')
+  const [contentType, setContentType] = useState<ContentType>('video')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  // Video state
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
+  // Image state
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  // Article state
+  const [articleContent, setArticleContent] = useState('')
+  // Common state
   const [uploading, setUploading] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [isScheduled, setIsScheduled] = useState(false)
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [createdTask, setCreatedTask] = useState<Task | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.getAccounts().then(setAccounts).catch(console.error)
   }, [])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Video handlers
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       setVideoFile(file)
@@ -154,7 +204,7 @@ export default function Publish() {
     }
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleVideoDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file && file.type.startsWith('video/')) {
@@ -163,6 +213,35 @@ export default function Publish() {
     }
   }
 
+  // Image handlers
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const remaining = 9 - imageFiles.length
+    const newFiles = files.slice(0, remaining)
+    if (newFiles.length === 0) return
+    setImageFiles((prev) => [...prev, ...newFiles])
+    setImagePreviews((prev) => [...prev, ...newFiles.map((f) => URL.createObjectURL(f))])
+  }
+
+  const handleImageDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
+    const remaining = 9 - imageFiles.length
+    const newFiles = files.slice(0, remaining)
+    if (newFiles.length === 0) return
+    setImageFiles((prev) => [...prev, ...newFiles])
+    setImagePreviews((prev) => [...prev, ...newFiles.map((f) => URL.createObjectURL(f))])
+  }
+
+  const removeImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+    setImagePreviews((prev) => {
+      URL.revokeObjectURL(prev[index])
+      return prev.filter((_, i) => i !== index)
+    })
+  }
+
+  // Common handlers
   const toggleAccount = (id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
@@ -182,8 +261,17 @@ export default function Publish() {
     return scheduled.getTime() > Date.now()
   }
 
+  const isFormValid = (): boolean => {
+    if (!title || selectedIds.length === 0) return false
+    if (isScheduled && !isScheduleValid()) return false
+    if (contentType === 'video' && !videoFile) return false
+    if (contentType === 'image_text' && imageFiles.length === 0) return false
+    if (contentType === 'article' && !articleContent.trim()) return false
+    return true
+  }
+
   const handlePublish = async () => {
-    if (!videoFile || !title || selectedIds.length === 0) {
+    if (!isFormValid()) {
       alert('请填写完整信息')
       return
     }
@@ -194,33 +282,59 @@ export default function Publish() {
     }
 
     try {
-      // 1. Upload video to Supabase Storage
       setUploading(true)
-      const fileName = `${Date.now()}-${videoFile.name}`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(fileName, videoFile)
 
-      if (uploadError) throw uploadError
+      let videoUrl: string | undefined
+      let imageUrls: string[] | undefined
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('videos')
-        .getPublicUrl(uploadData.path)
+      if (contentType === 'video' && videoFile) {
+        // Upload video to Supabase Storage
+        const fileName = `${Date.now()}-${videoFile.name}`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('videos')
+          .upload(fileName, videoFile)
+
+        if (uploadError) throw uploadError
+
+        const { data: urlData } = supabase.storage
+          .from('videos')
+          .getPublicUrl(uploadData.path)
+
+        videoUrl = urlData.publicUrl
+      } else if (contentType === 'image_text' && imageFiles.length > 0) {
+        // Upload images to Supabase Storage
+        imageUrls = []
+        for (const file of imageFiles) {
+          const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('images')
+            .upload(fileName, file)
+
+          if (uploadError) throw uploadError
+
+          const { data: urlData } = supabase.storage
+            .from('images')
+            .getPublicUrl(uploadData.path)
+
+          imageUrls.push(urlData.publicUrl)
+        }
+      }
 
       setUploading(false)
 
-      // 2. Create publish task
+      // Create publish task
       setPublishing(true)
       const task = await api.createTask({
         title,
-        description,
-        video_url: urlData.publicUrl,
+        description: description || undefined,
+        content_type: contentType,
+        video_url: videoUrl,
+        image_urls: imageUrls,
+        article_content: contentType === 'article' ? articleContent : undefined,
         account_ids: selectedIds,
         scheduled_at: getScheduledISOString(),
       })
 
-      // 3. Show share panel (for H5 share flow)
       setCreatedTask(task)
     } catch (err) {
       alert(err instanceof Error ? err.message : '创建失败')
@@ -230,9 +344,12 @@ export default function Publish() {
     }
   }
 
-  // If task was created, show share panel
+  // If task was created, show appropriate panel
   if (createdTask) {
-    return <SharePanel task={createdTask} />
+    if (createdTask.content_type === 'video') {
+      return <SharePanel task={createdTask} />
+    }
+    return <SuccessPanel task={createdTask} />
   }
 
   const activeAccounts = accounts.filter((a) => a.status === 'active')
@@ -247,40 +364,137 @@ export default function Publish() {
     }
   }
 
-  // Min date for the date picker (today)
   const today = new Date().toISOString().split('T')[0]
+
+  const handleSelectType = (type: ContentType) => {
+    setContentType(type)
+    setStep('form')
+  }
+
+  // Step 1: Type selection
+  if (step === 'select') {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-bold mb-6">选择发布类型</h1>
+        <div className="grid grid-cols-3 gap-4">
+          {CONTENT_TYPES.map((ct) => (
+            <button
+              key={ct.type}
+              onClick={() => handleSelectType(ct.type)}
+              className="flex flex-col items-center gap-3 p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-colors cursor-pointer"
+            >
+              <span className="text-4xl">{ct.icon}</span>
+              <span className="font-medium text-lg">{ct.label}</span>
+              <span className="text-sm text-gray-500 text-center">{ct.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Step 2: Content form
+  const typeLabel = CONTENT_TYPES.find((ct) => ct.type === contentType)!.label
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">发布视频</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => setStep('select')}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          ← 返回
+        </button>
+        <h1 className="text-2xl font-bold">发布{typeLabel}</h1>
+      </div>
 
       {/* Video Upload */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        onDrop={handleDrop}
-        onDragOver={(e) => e.preventDefault()}
-        className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors mb-6"
-      >
-        {videoPreview ? (
-          <video
-            src={videoPreview}
-            className="max-h-64 mx-auto rounded"
-            controls
+      {contentType === 'video' && (
+        <div
+          onClick={() => videoInputRef.current?.click()}
+          onDrop={handleVideoDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors mb-6"
+        >
+          {videoPreview ? (
+            <video
+              src={videoPreview}
+              className="max-h-64 mx-auto rounded"
+              controls
+            />
+          ) : (
+            <div>
+              <p className="text-gray-500 mb-2">拖拽或点击上传视频</p>
+              <p className="text-sm text-gray-400">支持 MP4, MOV 格式</p>
+            </div>
+          )}
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={handleVideoSelect}
+            className="hidden"
           />
-        ) : (
-          <div>
-            <p className="text-gray-500 mb-2">拖拽或点击上传视频</p>
-            <p className="text-sm text-gray-400">支持 MP4, MOV 格式</p>
+        </div>
+      )}
+
+      {/* Image Upload */}
+      {contentType === 'image_text' && (
+        <div className="mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {imagePreviews.map((preview, i) => (
+              <div key={i} className="relative aspect-square">
+                <img
+                  src={preview}
+                  alt={`图片 ${i + 1}`}
+                  className="w-full h-full object-cover rounded-lg border border-gray-200"
+                />
+                <button
+                  onClick={() => removeImage(i)}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {imageFiles.length < 9 && (
+              <div
+                onClick={() => imageInputRef.current?.click()}
+                onDrop={handleImageDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition-colors"
+              >
+                <span className="text-2xl text-gray-400">+</span>
+                <span className="text-xs text-gray-400 mt-1">{imageFiles.length}/9</span>
+              </div>
+            )}
           </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-      </div>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+        </div>
+      )}
+
+      {/* Article Content */}
+      {contentType === 'article' && (
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            文章内容 *
+          </label>
+          <textarea
+            value={articleContent}
+            onChange={(e) => setArticleContent(e.target.value)}
+            placeholder="输入文章内容..."
+            rows={10}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+          />
+        </div>
+      )}
 
       {/* Title */}
       <div className="mb-4">
@@ -291,7 +505,7 @@ export default function Publish() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="输入视频标题"
+          placeholder={`输入${typeLabel}标题`}
           maxLength={100}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -305,7 +519,7 @@ export default function Publish() {
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="输入视频描述，可以添加 #话题"
+          placeholder="输入描述，可以添加 #话题"
           rows={3}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -438,14 +652,7 @@ export default function Publish() {
       {/* Submit Button */}
       <button
         onClick={handlePublish}
-        disabled={
-          uploading ||
-          publishing ||
-          !videoFile ||
-          !title ||
-          selectedIds.length === 0 ||
-          (isScheduled && !isScheduleValid())
-        }
+        disabled={uploading || publishing || !isFormValid()}
         className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {uploading

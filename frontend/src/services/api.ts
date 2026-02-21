@@ -38,6 +38,9 @@ export interface Account {
   created_at: string
 }
 
+// Content types
+export type ContentType = 'video' | 'image_text' | 'article'
+
 // Task types
 export interface TaskAccount {
   account_id: string
@@ -52,7 +55,10 @@ export interface Task {
   id: string
   title: string
   description: string | null
-  video_url: string
+  content_type: ContentType
+  video_url: string | null
+  image_urls: string[]
+  article_content: string | null
   status: 'pending_share' | 'scheduled' | 'publishing' | 'completed' | 'failed' | 'cancelled'
   scheduled_at: string | null
   share_id: string | null
@@ -90,7 +96,10 @@ export const api = {
   createTask: (data: {
     title: string
     description?: string
-    video_url: string
+    content_type?: ContentType
+    video_url?: string
+    image_urls?: string[]
+    article_content?: string
     account_ids: string[]
     scheduled_at?: string
   }) => request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
