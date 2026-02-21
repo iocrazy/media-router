@@ -68,9 +68,9 @@ export interface ShareSchema {
 // API functions
 export const api = {
   // Auth
-  getDouyinAuthUrl: async () => {
+  getPlatformAuthUrl: async (platform: string) => {
     const token = await getAccessToken()
-    return `${API_BASE}/api/auth/douyin?token=${token}`
+    return `${API_BASE}/api/auth/${platform}?token=${token}`
   },
 
   // Accounts
