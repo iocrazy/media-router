@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { api } from '../services/api'
 import type { Account, Task } from '../services/api'
+import { getPlatform } from '../config/platforms'
 
 function SharePanel({ task }: { task: Task }) {
   const [schemaUrl, setSchemaUrl] = useState<string | null>(null)
@@ -324,32 +325,42 @@ export default function Publish() {
           </p>
         ) : (
           <div className="flex flex-wrap gap-3">
-            {activeAccounts.map((account) => (
-              <label
-                key={account.id}
-                className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                  selectedIds.includes(account.id)
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(account.id)}
-                  onChange={() => toggleAccount(account.id)}
-                  className="hidden"
-                />
-                <img
-                  src={account.avatar_url || '/default-avatar.png'}
-                  alt={account.username}
-                  className="w-8 h-8 rounded-full bg-gray-200"
-                />
-                <span className="text-sm">{account.username}</span>
-                {selectedIds.includes(account.id) && (
-                  <span className="text-blue-600">✓</span>
-                )}
-              </label>
-            ))}
+            {activeAccounts.map((account) => {
+              const platform = getPlatform(account.platform)
+              const PlatformIcon = platform.icon
+              return (
+                <label
+                  key={account.id}
+                  className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    selectedIds.includes(account.id)
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(account.id)}
+                    onChange={() => toggleAccount(account.id)}
+                    className="hidden"
+                  />
+                  <span
+                    className="flex items-center justify-center w-5 h-5 rounded-full text-white shrink-0"
+                    style={{ backgroundColor: platform.bgColor }}
+                  >
+                    <PlatformIcon className="w-3 h-3" />
+                  </span>
+                  <img
+                    src={account.avatar_url || '/default-avatar.png'}
+                    alt={account.username}
+                    className="w-8 h-8 rounded-full bg-gray-200"
+                  />
+                  <span className="text-sm">{account.username}</span>
+                  {selectedIds.includes(account.id) && (
+                    <span className="text-blue-600">✓</span>
+                  )}
+                </label>
+              )
+            })}
           </div>
         )}
       </div>
