@@ -1,4 +1,4 @@
--- 蚁小二 MVP 数据库初始化脚本
+-- MediaHub MVP 数据库初始化脚本
 -- 在 Supabase SQL Editor 中运行此脚本
 
 -- 1. 社交账号表
@@ -88,3 +88,7 @@ CREATE POLICY "Users can delete own videos"
   ON storage.objects FOR DELETE
   TO authenticated
   USING (bucket_id = 'videos' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Multi-platform support: store platform-specific data
+ALTER TABLE social_accounts
+  ADD COLUMN IF NOT EXISTS platform_config jsonb DEFAULT '{}';
