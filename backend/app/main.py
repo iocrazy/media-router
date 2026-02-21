@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
-from app.api import auth, accounts, tasks, share
+from app.api import auth, accounts, tasks, share, drafts
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(tasks.router)
 app.include_router(share.router)
+app.include_router(drafts.router)
 
 
 @app.get("/")
