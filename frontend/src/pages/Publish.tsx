@@ -1,9 +1,19 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
 import { api } from '../services/api'
-import type { Account, Task, ContentType } from '../services/api'
-import { getPlatform } from '../config/platforms'
+import type { Account, Task, ContentType, Visibility, DistributionMode, AccountConfig, Draft } from '../services/api'
+import type { VideoFile } from '../components/publish/ContentUpload'
+import ContentUpload from '../components/publish/ContentUpload'
+import CoverUpload from '../components/publish/CoverUpload'
+import TitleInput from '../components/publish/TitleInput'
+import DescriptionInput from '../components/publish/DescriptionInput'
+import AccountSelector from '../components/publish/AccountSelector'
+import PublishModeSelector from '../components/publish/PublishModeSelector'
+import VisibilitySelector from '../components/publish/VisibilitySelector'
+import AiContentToggle from '../components/publish/AiContentToggle'
+import TopicPicker from '../components/publish/TopicPicker'
+import DraftBar from '../components/publish/DraftBar'
+import BatchPreview from '../components/publish/BatchPreview'
 
 function SharePanel({ task }: { task: Task }) {
   const [schemaUrl, setSchemaUrl] = useState<string | null>(null)
@@ -127,18 +137,26 @@ function SharePanel({ task }: { task: Task }) {
   )
 }
 
-function SuccessPanel({ task }: { task: Task }) {
+function SuccessPanel({ tasks }: { tasks: Task[] }) {
   const navigate = useNavigate()
 
-  const typeLabel = task.content_type === 'image_text' ? '图文' : '文章'
+  const label = tasks.length > 1
+    ? `已创建 ${tasks.length} 个发布任务`
+    : tasks[0].content_type === 'image_text'
+      ? '图文任务创建成功'
+      : '文章任务创建成功'
+
+  const scheduledHint = tasks[0]?.scheduled_at
+    ? '任务将在预定时间发布'
+    : '任务已提交，等待发布'
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center mb-6">
         <div className="text-4xl mb-3">✅</div>
-        <h2 className="text-lg font-bold text-green-800 mb-1">{typeLabel}任务创建成功</h2>
+        <h2 className="text-lg font-bold text-green-800 mb-1">{label}</h2>
         <p className="text-sm text-green-600">
-          {task.scheduled_at ? '任务将在预定时间发布' : '任务已提交，等待发布'}
+          {scheduledHint}
         </p>
       </div>
 
@@ -167,214 +185,203 @@ const CONTENT_TYPES: { type: ContentType; label: string; desc: string; icon: str
 ]
 
 export default function Publish() {
-  const [step, setStep] = useState<'select' | 'form'>('select')
+  // Step
+  const [step, setStep] = useState<'select' | 'form' | 'success'>('select')
   const [contentType, setContentType] = useState<ContentType>('video')
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  // Content
+  const [videoFiles, setVideoFiles] = useState<VideoFile[]>([])
+  const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [articleContent, setArticleContent] = useState('')
+
+  // Form
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  // Video state
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [videoPreview, setVideoPreview] = useState<string | null>(null)
-  // Image state
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [imagePreviews, setImagePreviews] = useState<string[]>([])
-  // Article state
-  const [articleContent, setArticleContent] = useState('')
-  // Common state
-  const [uploading, setUploading] = useState(false)
-  const [publishing, setPublishing] = useState(false)
+  const [coverUrl, setCoverUrl] = useState<string | null>(null)
+  const [visibility, setVisibility] = useState<Visibility>('public')
+  const [aiContent, setAiContent] = useState(false)
+
+  // Accounts
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [accountConfigs, setAccountConfigs] = useState<Record<string, AccountConfig>>({})
+
+  // Publish mode
   const [isScheduled, setIsScheduled] = useState(false)
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
-  const [createdTask, setCreatedTask] = useState<Task | null>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
+  const [distributionMode, setDistributionMode] = useState<DistributionMode>('broadcast')
+  const [useFilenameAsTitle, setUseFilenameAsTitle] = useState(false)
 
+  // Drafts
+  const [drafts, setDrafts] = useState<Draft[]>([])
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+
+  // UI
+  const [showTopicPicker, setShowTopicPicker] = useState(false)
+  const [showBatchPreview, setShowBatchPreview] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [createdTasks, setCreatedTasks] = useState<Task[]>([])
+
+  // Load accounts and drafts on mount
   useEffect(() => {
     api.getAccounts().then(setAccounts).catch(console.error)
+    api.getDrafts().then(setDrafts).catch(console.error)
   }, [])
-
-  // Video handlers
-  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setVideoFile(file)
-      setVideoPreview(URL.createObjectURL(file))
-    }
-  }
-
-  const handleVideoDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (file && file.type.startsWith('video/')) {
-      setVideoFile(file)
-      setVideoPreview(URL.createObjectURL(file))
-    }
-  }
-
-  // Image handlers
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    const remaining = 9 - imageFiles.length
-    const newFiles = files.slice(0, remaining)
-    if (newFiles.length === 0) return
-    setImageFiles((prev) => [...prev, ...newFiles])
-    setImagePreviews((prev) => [...prev, ...newFiles.map((f) => URL.createObjectURL(f))])
-  }
-
-  const handleImageDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
-    const remaining = 9 - imageFiles.length
-    const newFiles = files.slice(0, remaining)
-    if (newFiles.length === 0) return
-    setImageFiles((prev) => [...prev, ...newFiles])
-    setImagePreviews((prev) => [...prev, ...newFiles.map((f) => URL.createObjectURL(f))])
-  }
-
-  const removeImage = (index: number) => {
-    setImageFiles((prev) => prev.filter((_, i) => i !== index))
-    setImagePreviews((prev) => {
-      URL.revokeObjectURL(prev[index])
-      return prev.filter((_, i) => i !== index)
-    })
-  }
-
-  // Common handlers
-  const toggleAccount = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
-  }
 
   const getScheduledISOString = (): string | undefined => {
     if (!isScheduled || !scheduledDate || !scheduledTime) return undefined
-    const localDate = new Date(`${scheduledDate}T${scheduledTime}`)
-    return localDate.toISOString()
-  }
-
-  const isScheduleValid = (): boolean => {
-    if (!isScheduled) return true
-    if (!scheduledDate || !scheduledTime) return false
-    const scheduled = new Date(`${scheduledDate}T${scheduledTime}`)
-    return scheduled.getTime() > Date.now()
+    return new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
   }
 
   const isFormValid = (): boolean => {
-    if (!title || selectedIds.length === 0) return false
-    if (isScheduled && !isScheduleValid()) return false
-    if (contentType === 'video' && !videoFile) return false
-    if (contentType === 'image_text' && imageFiles.length === 0) return false
+    if (!title.trim() || selectedIds.length === 0) return false
+    if (contentType === 'video' && videoFiles.filter(f => f.url).length === 0) return false
+    if (contentType === 'image_text' && imageUrls.length === 0) return false
     if (contentType === 'article' && !articleContent.trim()) return false
+    if (isScheduled && (!scheduledDate || !scheduledTime)) return false
     return true
   }
-
-  const handlePublish = async () => {
-    if (!isFormValid()) {
-      alert('请填写完整信息')
-      return
-    }
-
-    if (isScheduled && !isScheduleValid()) {
-      alert('定时发布时间必须晚于当前时间')
-      return
-    }
-
-    try {
-      setUploading(true)
-
-      let videoUrl: string | undefined
-      let imageUrls: string[] | undefined
-
-      if (contentType === 'video' && videoFile) {
-        // Upload video to Supabase Storage
-        const fileName = `${Date.now()}-${videoFile.name}`
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('videos')
-          .upload(fileName, videoFile)
-
-        if (uploadError) throw uploadError
-
-        const { data: urlData } = supabase.storage
-          .from('videos')
-          .getPublicUrl(uploadData.path)
-
-        videoUrl = urlData.publicUrl
-      } else if (contentType === 'image_text' && imageFiles.length > 0) {
-        // Upload images to Supabase Storage
-        imageUrls = []
-        for (const file of imageFiles) {
-          const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('images')
-            .upload(fileName, file)
-
-          if (uploadError) throw uploadError
-
-          const { data: urlData } = supabase.storage
-            .from('images')
-            .getPublicUrl(uploadData.path)
-
-          imageUrls.push(urlData.publicUrl)
-        }
-      }
-
-      setUploading(false)
-
-      // Create publish task
-      setPublishing(true)
-      const task = await api.createTask({
-        title,
-        description: description || undefined,
-        content_type: contentType,
-        video_url: videoUrl,
-        image_urls: imageUrls,
-        article_content: contentType === 'article' ? articleContent : undefined,
-        account_ids: selectedIds,
-        scheduled_at: getScheduledISOString(),
-      })
-
-      setCreatedTask(task)
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '创建失败')
-    } finally {
-      setUploading(false)
-      setPublishing(false)
-    }
-  }
-
-  // If task was created, show appropriate panel
-  if (createdTask) {
-    if (createdTask.content_type === 'video') {
-      return <SharePanel task={createdTask} />
-    }
-    return <SuccessPanel task={createdTask} />
-  }
-
-  const activeAccounts = accounts.filter((a) => a.status === 'active')
-
-  // Set default scheduled time to 1 hour from now
-  const handleScheduleToggle = (scheduled: boolean) => {
-    setIsScheduled(scheduled)
-    if (scheduled && !scheduledDate) {
-      const now = new Date(Date.now() + 60 * 60 * 1000)
-      setScheduledDate(now.toISOString().split('T')[0])
-      setScheduledTime(now.toTimeString().slice(0, 5))
-    }
-  }
-
-  const today = new Date().toISOString().split('T')[0]
 
   const handleSelectType = (type: ContentType) => {
     setContentType(type)
     setStep('form')
   }
 
-  // Step 1: Type selection
+  const handleLoadDraft = (draft: Draft) => {
+    setContentType(draft.content_type)
+    setTitle(draft.title || '')
+    setDescription(draft.description || '')
+    setVideoFiles(draft.video_urls.map(url => ({ file: new File([], ''), name: url.split('/').pop() || 'video', url, uploading: false })))
+    setImageUrls(draft.image_urls)
+    setArticleContent(draft.article_content || '')
+    setCoverUrl(draft.cover_url)
+    setVisibility(draft.visibility)
+    setAiContent(draft.ai_content)
+    setSelectedIds(draft.account_ids)
+    setAccountConfigs(draft.account_configs)
+    setDistributionMode(draft.distribution_mode)
+    if (draft.scheduled_at) {
+      setIsScheduled(true)
+      const d = new Date(draft.scheduled_at)
+      setScheduledDate(d.toISOString().split('T')[0])
+      setScheduledTime(d.toTimeString().slice(0, 5))
+    }
+    setCurrentDraftId(draft.id)
+    setStep('form')
+  }
+
+  const handleDeleteDraft = (id: string) => {
+    api.deleteDraft(id).then(() => {
+      setDrafts(prev => prev.filter(d => d.id !== id))
+      if (currentDraftId === id) {
+        setCurrentDraftId(null)
+      }
+    }).catch(console.error)
+  }
+
+  const handleSaveDraft = async () => {
+    const draftData = {
+      content_type: contentType,
+      title: title || null,
+      description: description || null,
+      video_urls: videoFiles.filter(f => f.url).map(f => f.url!),
+      image_urls: imageUrls,
+      article_content: articleContent || null,
+      cover_url: coverUrl,
+      visibility,
+      ai_content: aiContent,
+      topics: [],
+      account_ids: selectedIds,
+      account_configs: accountConfigs,
+      distribution_mode: distributionMode,
+      scheduled_at: getScheduledISOString() || null,
+    }
+
+    try {
+      if (currentDraftId) {
+        await api.updateDraft(currentDraftId, draftData)
+      } else {
+        const saved = await api.createDraft(draftData)
+        setCurrentDraftId(saved.id)
+      }
+      alert('草稿已保存')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '保存草稿失败')
+    }
+  }
+
+  const handlePublish = async () => {
+    try {
+      setPublishing(true)
+
+      // Build video URLs from uploaded files
+      const videoUrls = videoFiles.filter(f => f.url).map(f => f.url!)
+
+      const scheduledAt = getScheduledISOString()
+
+      const tasks = await api.createTask({
+        title,
+        description: description || undefined,
+        content_type: contentType,
+        video_url: videoUrls.length === 1 ? videoUrls[0] : undefined,
+        video_urls: videoUrls.length > 1 ? videoUrls : undefined,
+        image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+        article_content: contentType === 'article' ? articleContent : undefined,
+        cover_url: coverUrl || undefined,
+        visibility,
+        ai_content: aiContent,
+        topics: [],
+        account_ids: selectedIds,
+        account_configs: Object.keys(accountConfigs).length > 0 ? accountConfigs : undefined,
+        distribution_mode: distributionMode,
+        scheduled_at: scheduledAt,
+      })
+
+      setCreatedTasks(tasks)
+      setStep('success')
+
+      // Delete draft if publishing from a draft
+      if (currentDraftId) {
+        api.deleteDraft(currentDraftId).catch(console.error)
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '创建失败')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handleTopicSelect = (topic: string) => {
+    setDescription(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + `#${topic} `)
+    setShowTopicPicker(false)
+  }
+
+  const toggleAccount = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const isBatchVideo = contentType === 'video' && videoFiles.filter(f => f.url).length > 1
+
+  // Step: success
+  if (step === 'success') {
+    if (createdTasks.length === 1 && createdTasks[0].content_type === 'video') {
+      return <SharePanel task={createdTasks[0]} />
+    }
+    return <SuccessPanel tasks={createdTasks} />
+  }
+
+  // Step: select
   if (step === 'select') {
     return (
       <div className="max-w-2xl mx-auto">
+        <DraftBar
+          drafts={drafts}
+          onLoad={handleLoadDraft}
+          onDelete={handleDeleteDraft}
+        />
         <h1 className="text-2xl font-bold mb-6">选择发布类型</h1>
         <div className="grid grid-cols-3 gap-4">
           {CONTENT_TYPES.map((ct) => (
@@ -393,11 +400,11 @@ export default function Publish() {
     )
   }
 
-  // Step 2: Content form
+  // Step: form
   const typeLabel = CONTENT_TYPES.find((ct) => ct.type === contentType)!.label
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => setStep('select')}
@@ -408,261 +415,121 @@ export default function Publish() {
         <h1 className="text-2xl font-bold">发布{typeLabel}</h1>
       </div>
 
-      {/* Video Upload */}
-      {contentType === 'video' && (
-        <div
-          onClick={() => videoInputRef.current?.click()}
-          onDrop={handleVideoDrop}
-          onDragOver={(e) => e.preventDefault()}
-          className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors mb-6"
+      <ContentUpload
+        contentType={contentType}
+        videoFiles={videoFiles}
+        onVideoFilesChange={setVideoFiles}
+        imageUrls={imageUrls}
+        onImageUrlsChange={setImageUrls}
+        articleContent={articleContent}
+        onArticleContentChange={setArticleContent}
+      />
+
+      {(contentType === 'video' || contentType === 'image_text') && (
+        <CoverUpload
+          value={coverUrl}
+          onChange={setCoverUrl}
+          imageUrls={contentType === 'image_text' ? imageUrls : undefined}
+        />
+      )}
+
+      <TitleInput
+        value={title}
+        onChange={setTitle}
+      />
+
+      <DescriptionInput
+        value={description}
+        onChange={setDescription}
+        onAddTopic={() => setShowTopicPicker(true)}
+      />
+
+      <AccountSelector
+        accounts={accounts}
+        selectedIds={selectedIds}
+        onToggle={toggleAccount}
+        accountConfigs={accountConfigs}
+        onConfigChange={(id, config) => setAccountConfigs(prev => ({ ...prev, [id]: config }))}
+      />
+
+      <PublishModeSelector
+        isScheduled={isScheduled}
+        onScheduleChange={setIsScheduled}
+        scheduledDate={scheduledDate}
+        onScheduledDateChange={setScheduledDate}
+        scheduledTime={scheduledTime}
+        onScheduledTimeChange={setScheduledTime}
+        distributionMode={distributionMode}
+        onDistributionModeChange={setDistributionMode}
+        showDistribution={contentType === 'video' && videoFiles.length > 1}
+        useFilenameAsTitle={useFilenameAsTitle}
+        onFilenameAsTitleChange={setUseFilenameAsTitle}
+      />
+
+      <VisibilitySelector
+        value={visibility}
+        onChange={setVisibility}
+      />
+
+      <AiContentToggle
+        value={aiContent}
+        onChange={setAiContent}
+      />
+
+      {/* Fixed bottom bar */}
+      <div className="sticky bottom-0 bg-white border-t p-4 flex gap-3">
+        <button
+          type="button"
+          onClick={handleSaveDraft}
+          className="flex-1 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
         >
-          {videoPreview ? (
-            <video
-              src={videoPreview}
-              className="max-h-64 mx-auto rounded"
-              controls
-            />
-          ) : (
-            <div>
-              <p className="text-gray-500 mb-2">拖拽或点击上传视频</p>
-              <p className="text-sm text-gray-400">支持 MP4, MOV 格式</p>
-            </div>
-          )}
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            onChange={handleVideoSelect}
-            className="hidden"
-          />
-        </div>
-      )}
-
-      {/* Image Upload */}
-      {contentType === 'image_text' && (
-        <div className="mb-6">
-          <div className="grid grid-cols-3 gap-3 mb-3">
-            {imagePreviews.map((preview, i) => (
-              <div key={i} className="relative aspect-square">
-                <img
-                  src={preview}
-                  alt={`图片 ${i + 1}`}
-                  className="w-full h-full object-cover rounded-lg border border-gray-200"
-                />
-                <button
-                  onClick={() => removeImage(i)}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {imageFiles.length < 9 && (
-              <div
-                onClick={() => imageInputRef.current?.click()}
-                onDrop={handleImageDrop}
-                onDragOver={(e) => e.preventDefault()}
-                className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition-colors"
-              >
-                <span className="text-2xl text-gray-400">+</span>
-                <span className="text-xs text-gray-400 mt-1">{imageFiles.length}/9</span>
-              </div>
-            )}
-          </div>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleImageSelect}
-            className="hidden"
-          />
-        </div>
-      )}
-
-      {/* Article Content */}
-      {contentType === 'article' && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            文章内容 *
-          </label>
-          <textarea
-            value={articleContent}
-            onChange={(e) => setArticleContent(e.target.value)}
-            placeholder="输入文章内容..."
-            rows={10}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-          />
-        </div>
-      )}
-
-      {/* Title */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          标题 *
-        </label>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={`输入${typeLabel}标题`}
-          maxLength={100}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* Description */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          描述
-        </label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="输入描述，可以添加 #话题"
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* Account Selection */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          选择发布账号 *
-        </label>
-        {activeAccounts.length === 0 ? (
-          <p className="text-gray-500 text-sm">
-            没有可用账号，请先
-            <a href="/accounts" className="text-blue-600 hover:underline">
-              添加账号
-            </a>
-          </p>
+          保存到草稿
+        </button>
+        {isBatchVideo ? (
+          <button
+            type="button"
+            onClick={() => setShowBatchPreview(true)}
+            disabled={publishing || !isFormValid()}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            查看批量任务预览
+          </button>
         ) : (
-          <div className="flex flex-wrap gap-3">
-            {activeAccounts.map((account) => {
-              const platform = getPlatform(account.platform)
-              const PlatformIcon = platform.icon
-              return (
-                <label
-                  key={account.id}
-                  className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                    selectedIds.includes(account.id)
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(account.id)}
-                    onChange={() => toggleAccount(account.id)}
-                    className="hidden"
-                  />
-                  <span
-                    className="flex items-center justify-center w-5 h-5 rounded-full text-white shrink-0"
-                    style={{ backgroundColor: platform.bgColor }}
-                  >
-                    <PlatformIcon className="w-3 h-3" />
-                  </span>
-                  <img
-                    src={account.avatar_url || '/default-avatar.png'}
-                    alt={account.username}
-                    className="w-8 h-8 rounded-full bg-gray-200"
-                  />
-                  <span className="text-sm">{account.username}</span>
-                  {selectedIds.includes(account.id) && (
-                    <span className="text-blue-600">✓</span>
-                  )}
-                </label>
-              )
-            })}
-          </div>
+          <button
+            type="button"
+            onClick={handlePublish}
+            disabled={publishing || !isFormValid()}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {publishing ? '提交中...' : '创建发布任务'}
+          </button>
         )}
       </div>
 
-      {/* Publish Mode Toggle */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          发布方式
-        </label>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleScheduleToggle(false)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              !isScheduled
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            立即发布
-          </button>
-          <button
-            type="button"
-            onClick={() => handleScheduleToggle(true)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              isScheduled
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            定时发布
-          </button>
-        </div>
-      </div>
-
-      {/* Schedule DateTime Picker */}
-      {isScheduled && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <label className="block text-sm font-medium text-blue-800 mb-2">
-            选择发布时间
-          </label>
-          <div className="flex gap-3">
-            <input
-              type="date"
-              value={scheduledDate}
-              min={today}
-              onChange={(e) => setScheduledDate(e.target.value)}
-              className="flex-1 px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
-            <input
-              type="time"
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-              className="flex-1 px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
-          </div>
-          {scheduledDate && scheduledTime && !isScheduleValid() && (
-            <p className="text-red-500 text-xs mt-2">
-              定时发布时间必须晚于当前时间
-            </p>
-          )}
-        </div>
+      {/* TopicPicker modal */}
+      {showTopicPicker && (
+        <TopicPicker
+          onSelect={handleTopicSelect}
+          onClose={() => setShowTopicPicker(false)}
+        />
       )}
 
-      {/* Upload Progress */}
-      {uploading && (
-        <div className="mb-4">
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 animate-pulse w-full" />
-          </div>
-          <p className="text-sm text-gray-500 mt-1">上传中...</p>
-        </div>
+      {/* BatchPreview modal */}
+      {showBatchPreview && (
+        <BatchPreview
+          videoFiles={videoFiles.map(f => ({ name: f.name, url: f.url }))}
+          accounts={accounts}
+          selectedIds={selectedIds}
+          distributionMode={distributionMode}
+          useFilenameAsTitle={useFilenameAsTitle}
+          title={title}
+          onConfirm={() => {
+            setShowBatchPreview(false)
+            handlePublish()
+          }}
+          onCancel={() => setShowBatchPreview(false)}
+        />
       )}
-
-      {/* Submit Button */}
-      <button
-        onClick={handlePublish}
-        disabled={uploading || publishing || !isFormValid()}
-        className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {uploading
-          ? '上传中...'
-          : publishing
-            ? '提交中...'
-            : isScheduled
-              ? '设置定时发布'
-              : '创建发布任务'}
-      </button>
     </div>
   )
 }
