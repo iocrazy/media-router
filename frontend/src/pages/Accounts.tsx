@@ -1,12 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../services/api'
 import type { Account } from '../services/api'
-
-const DouyinIcon = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
-    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z" />
-  </svg>
-)
+import { PLATFORMS, getPlatform } from '../config/platforms'
 
 function AccountCard({
   account,
@@ -18,6 +13,8 @@ function AccountCard({
   onDelete: (id: string) => void
 }) {
   const isActive = account.status === 'active'
+  const platform = getPlatform(account.platform)
+  const PlatformIcon = platform.icon
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 w-52 overflow-hidden hover:shadow-md transition-shadow">
@@ -42,13 +39,16 @@ function AccountCard({
             alt={account.username}
             className="w-16 h-16 rounded-full bg-gray-100 object-cover ring-2 ring-gray-100"
           />
-          <div className="absolute -bottom-1 -right-1 bg-black text-white rounded-full p-0.5">
-            <DouyinIcon />
+          <div
+            className="absolute -bottom-1 -right-1 text-white rounded-full p-0.5"
+            style={{ backgroundColor: platform.bgColor }}
+          >
+            <PlatformIcon className="w-4 h-4" />
           </div>
         </div>
 
         <p className="mt-3 font-semibold text-gray-900 text-sm">{account.username}</p>
-        <p className="text-xs text-gray-400 mt-1">抖音账号</p>
+        <p className="text-xs text-gray-400 mt-1">{platform.name}账号</p>
       </div>
 
       {/* Divider */}
@@ -97,6 +97,8 @@ export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showPlatformMenu, setShowPlatformMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const fetchAccounts = async () => {
     try {
@@ -119,8 +121,22 @@ export default function Accounts() {
     fetchAccounts()
   }, [])
 
-  const handleAddDouyin = async () => {
-    const url = await api.getDouyinAuthUrl()
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowPlatformMenu(false)
+      }
+    }
+    if (showPlatformMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showPlatformMenu])
+
+  const handleAddAccount = async (platform: string) => {
+    setShowPlatformMenu(false)
+    const url = await api.getPlatformAuthUrl(platform)
     window.location.href = url
   }
 
@@ -151,16 +167,44 @@ export default function Accounts() {
     )
   }
 
+  const AddAccountButton = () => (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setShowPlatformMenu(!showPlatformMenu)}
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+      >
+        + 添加账号
+      </button>
+      {showPlatformMenu && (
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+          {Object.entries(PLATFORMS).map(([key, platform]) => {
+            const Icon = platform.icon
+            return (
+              <button
+                key={key}
+                onClick={() => handleAddAccount(key)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <span
+                  className="flex items-center justify-center w-6 h-6 rounded-full text-white"
+                  style={{ backgroundColor: platform.bgColor }}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </span>
+                {platform.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">账号管理</h1>
-        <button
-          onClick={handleAddDouyin}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          + 添加抖音账号
-        </button>
+        <AddAccountButton />
       </div>
 
       {error && (
@@ -171,16 +215,33 @@ export default function Accounts() {
 
       {accounts.length === 0 ? (
         <div className="text-center py-16 bg-gray-50 rounded-xl">
-          <div className="text-4xl mb-3 text-gray-300">
-            <DouyinIcon />
+          <div className="flex justify-center gap-3 text-4xl mb-3 text-gray-300">
+            {Object.entries(PLATFORMS).map(([key, platform]) => {
+              const Icon = platform.icon
+              return (
+                <span key={key} className="opacity-40">
+                  <Icon className="w-8 h-8" />
+                </span>
+              )
+            })}
           </div>
           <p className="text-gray-400 mb-4">还没有绑定任何账号</p>
-          <button
-            onClick={handleAddDouyin}
-            className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            添加抖音账号
-          </button>
+          <div className="flex justify-center gap-3">
+            {Object.entries(PLATFORMS).map(([key, platform]) => {
+              const Icon = platform.icon
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleAddAccount(key)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-white rounded-md hover:opacity-90 transition-opacity"
+                  style={{ backgroundColor: platform.bgColor }}
+                >
+                  <Icon className="w-4 h-4" />
+                  添加{platform.name}
+                </button>
+              )
+            })}
+          </div>
         </div>
       ) : (
         <div className="flex flex-wrap gap-4">
