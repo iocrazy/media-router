@@ -111,6 +111,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Footer */}
       <div className="text-center py-2 text-xs text-gray-300 mb-14">
+        <span className="mr-2">v{__APP_VERSION__}</span>
         <a
           href="https://beian.miit.gov.cn/"
           target="_blank"
