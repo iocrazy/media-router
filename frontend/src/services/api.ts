@@ -40,6 +40,14 @@ export interface Account {
 
 // Content types
 export type ContentType = 'video' | 'image_text' | 'article'
+export type DistributionMode = 'broadcast' | 'one_to_one'
+export type Visibility = 'public' | 'private' | 'draft'
+
+export interface AccountConfig {
+  title?: string
+  description?: string
+  topics?: string[]
+}
 
 // Task types
 export interface TaskAccount {
@@ -59,6 +67,12 @@ export interface Task {
   video_url: string | null
   image_urls: string[]
   article_content: string | null
+  cover_url: string | null
+  visibility: string
+  ai_content: boolean
+  topics: string[]
+  distribution_mode: string | null
+  batch_id: string | null
   status: 'pending_share' | 'scheduled' | 'publishing' | 'completed' | 'failed' | 'cancelled'
   scheduled_at: string | null
   share_id: string | null
@@ -69,6 +83,26 @@ export interface Task {
 export interface ShareSchema {
   schema_url: string
   share_id: string
+}
+
+export interface Draft {
+  id: string
+  content_type: ContentType
+  title: string | null
+  description: string | null
+  video_urls: string[]
+  image_urls: string[]
+  article_content: string | null
+  cover_url: string | null
+  visibility: Visibility
+  ai_content: boolean
+  topics: string[]
+  account_ids: string[]
+  account_configs: Record<string, AccountConfig>
+  distribution_mode: DistributionMode
+  scheduled_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 // API functions
@@ -98,14 +132,35 @@ export const api = {
     description?: string
     content_type?: ContentType
     video_url?: string
+    video_urls?: string[]
     image_urls?: string[]
     article_content?: string
+    cover_url?: string
+    visibility?: Visibility
+    ai_content?: boolean
+    topics?: string[]
     account_ids: string[]
+    account_configs?: Record<string, AccountConfig>
+    distribution_mode?: DistributionMode
     scheduled_at?: string
-  }) => request<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
+  }) => request<Task[]>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
 
   cancelTask: (id: string) =>
     request<Task>(`/api/tasks/${id}/cancel`, { method: 'POST' }),
+
+  // Drafts
+  getDrafts: () => request<Draft[]>('/api/drafts'),
+
+  getDraft: (id: string) => request<Draft>(`/api/drafts/${id}`),
+
+  createDraft: (data: Omit<Draft, 'id' | 'created_at' | 'updated_at'>) =>
+    request<Draft>('/api/drafts', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateDraft: (id: string, data: Omit<Draft, 'id' | 'created_at' | 'updated_at'>) =>
+    request<Draft>(`/api/drafts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteDraft: (id: string) =>
+    request<void>(`/api/drafts/${id}`, { method: 'DELETE' }),
 
   // Share
   getShareSchema: (taskId: string) =>
