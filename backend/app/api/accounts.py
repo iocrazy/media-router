@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase import supabase_admin
 from app.core.auth import get_current_user
 from app.models.schemas import AccountResponse
-from app.services import douyin
+from app.services.platforms import get_adapter
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -55,7 +55,8 @@ async def refresh_account(account_id: str, user_id: str = Depends(get_current_us
 
     try:
         # Refresh the token
-        token_data = await douyin.refresh_access_token(account["refresh_token"])
+        adapter = get_adapter(account["platform"])
+        token_data = await adapter.refresh_token(account["refresh_token"])
 
         # Update account
         token_expires_at = datetime.now() + timedelta(seconds=token_data["expires_in"])
