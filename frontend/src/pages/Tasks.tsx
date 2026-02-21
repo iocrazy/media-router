@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../services/api'
 import type { Task } from '../services/api'
+import { getPlatform } from '../config/platforms'
 
 function Countdown({ scheduledAt }: { scheduledAt: string }) {
   const [remaining, setRemaining] = useState('')
@@ -287,16 +288,29 @@ export default function Tasks() {
               )}
 
               <div className="space-y-2">
-                {task.accounts.map((acc) => (
+                {task.accounts.map((acc) => {
+                  // TODO: Use acc.platform once the API returns it in TaskAccount
+                  const accAny = acc as unknown as { platform?: string }
+                  const platform = getPlatform(accAny.platform || 'douyin')
+                  const PlatformIcon = platform.icon
+                  return (
                   <div
                     key={acc.account_id}
                     className="flex items-center gap-3 p-2 bg-gray-50 rounded"
                   >
-                    <img
-                      src={acc.avatar_url || '/default-avatar.png'}
-                      alt={acc.username}
-                      className="w-6 h-6 rounded-full bg-gray-200"
-                    />
+                    <div className="relative shrink-0">
+                      <img
+                        src={acc.avatar_url || '/default-avatar.png'}
+                        alt={acc.username}
+                        className="w-6 h-6 rounded-full bg-gray-200"
+                      />
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full text-white"
+                        style={{ backgroundColor: platform.bgColor }}
+                      >
+                        <PlatformIcon className="w-2 h-2" />
+                      </span>
+                    </div>
                     <span className="text-sm flex-1">{acc.username}</span>
                     <span className="text-sm">
                       {getStatusIcon(acc.status)} {getStatusText(acc.status)}
@@ -317,7 +331,8 @@ export default function Tasks() {
                       </span>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}
