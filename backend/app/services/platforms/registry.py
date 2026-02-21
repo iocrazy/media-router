@@ -16,3 +16,10 @@ def get_adapter(platform: str) -> PlatformAdapter:
 
 def get_all_platforms() -> list[str]:
     return list(_adapters.keys())
+
+
+def _register_all():
+    from app.services.platforms.douyin import DouyinAdapter
+    register(DouyinAdapter())
+
+_register_all()
