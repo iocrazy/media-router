@@ -56,9 +56,11 @@ async def publish_to_account(task_id: str, task_account_id: str, account: dict, 
         }).eq("id", task_id).execute()
 
 
-@router.post("", response_model=TaskResponse)
+@router.post("", response_model=list[TaskResponse])
 async def create_task(data: TaskCreate, user_id: str = Depends(get_current_user)):
-    """Create a new publish task (H5 share flow)."""
+    """Create publish task(s). Supports batch video mode."""
+    import secrets as _secrets
+    import uuid
 
     # Validate accounts belong to user
     accounts_result = supabase_admin.table("social_accounts").select("*").eq(
@@ -68,7 +70,6 @@ async def create_task(data: TaskCreate, user_id: str = Depends(get_current_user)
     if len(accounts_result.data) != len(data.account_ids):
         raise HTTPException(status_code=400, detail="Some accounts not found")
 
-    # Check all accounts are active
     for account in accounts_result.data:
         if account["status"] != "active":
             raise HTTPException(
@@ -76,62 +77,96 @@ async def create_task(data: TaskCreate, user_id: str = Depends(get_current_user)
                 detail=f"Account {account['username']} is not active"
             )
 
-    # Determine status: scheduled > pending_share (H5 share flow)
+    # Build video list for batch support
+    video_list = data.video_urls if data.video_urls else ([data.video_url] if data.video_url else [None])
+    batch_id = str(uuid.uuid4()) if len(video_list) > 1 else None
+
     is_scheduled = data.scheduled_at is not None
     initial_status = "scheduled" if is_scheduled else "pending_share"
 
-    # Generate share_id for H5 share tracking
-    import secrets as _secrets
-    share_id = _secrets.token_urlsafe(16)
+    # Build account lookup by id
+    accounts_by_id = {a["id"]: a for a in accounts_result.data}
 
-    # Create publish task
-    task_data = {
-        "user_id": user_id,
-        "title": data.title,
-        "description": data.description,
-        "content_type": data.content_type,
-        "video_url": data.video_url,
-        "image_urls": data.image_urls,
-        "article_content": data.article_content,
-        "status": initial_status,
-        "share_id": share_id,
-    }
-    if is_scheduled:
-        task_data["scheduled_at"] = data.scheduled_at.isoformat()
+    created_tasks = []
 
-    task_result = supabase_admin.table("publish_tasks").insert(task_data).execute()
+    for video_idx, video_url in enumerate(video_list):
+        share_id = _secrets.token_urlsafe(16)
 
-    task = task_result.data[0]
-    task_id = task["id"]
+        # Determine accounts for this task based on distribution mode
+        if data.distribution_mode == "one_to_one" and len(video_list) > 1:
+            # Round-robin: assign one account per video
+            account_idx = video_idx % len(data.account_ids)
+            task_account_ids = [data.account_ids[account_idx]]
+        else:
+            # Broadcast: all accounts
+            task_account_ids = data.account_ids
 
-    # Create task_accounts records
-    task_accounts = []
-    for account in accounts_result.data:
-        ta_result = supabase_admin.table("task_accounts").insert({
-            "task_id": task_id,
-            "account_id": account["id"],
-            "status": "pending",
-        }).execute()
-        task_accounts.append({
-            **ta_result.data[0],
-            "username": account["username"],
-            "avatar_url": account["avatar_url"],
+        task_data = {
+            "user_id": user_id,
+            "title": data.title,
+            "description": data.description,
+            "content_type": data.content_type,
+            "video_url": video_url,
+            "image_urls": data.image_urls,
+            "article_content": data.article_content,
+            "cover_url": data.cover_url,
+            "visibility": data.visibility,
+            "ai_content": data.ai_content,
+            "topics": data.topics,
+            "distribution_mode": data.distribution_mode,
+            "batch_id": batch_id,
+            "status": initial_status,
+            "share_id": share_id,
+        }
+        if is_scheduled:
+            task_data["scheduled_at"] = data.scheduled_at.isoformat()
+
+        task_result = supabase_admin.table("publish_tasks").insert(task_data).execute()
+        task = task_result.data[0]
+        task_id = task["id"]
+
+        # Create task_accounts with per-account overrides
+        task_accounts = []
+        for account_id in task_account_ids:
+            account = accounts_by_id[account_id]
+            config = data.account_configs.get(account_id)
+
+            ta_data = {
+                "task_id": task_id,
+                "account_id": account_id,
+                "status": "pending",
+            }
+            if config:
+                if config.title is not None:
+                    ta_data["title"] = config.title
+                if config.description is not None:
+                    ta_data["description"] = config.description
+                if config.topics is not None:
+                    ta_data["topics"] = config.topics
+
+            ta_result = supabase_admin.table("task_accounts").insert(ta_data).execute()
+            task_accounts.append({
+                **ta_result.data[0],
+                "username": account["username"],
+                "avatar_url": account["avatar_url"],
+            })
+
+        created_tasks.append({
+            **task,
+            "accounts": [
+                {
+                    "account_id": ta["account_id"],
+                    "username": ta["username"],
+                    "avatar_url": ta["avatar_url"],
+                    "status": ta["status"],
+                    "error_message": None,
+                    "published_url": None,
+                }
+                for ta in task_accounts
+            ],
         })
 
-    return {
-        **task,
-        "accounts": [
-            {
-                "account_id": ta["account_id"],
-                "username": ta["username"],
-                "avatar_url": ta["avatar_url"],
-                "status": ta["status"],
-                "error_message": None,
-                "published_url": None,
-            }
-            for ta in task_accounts
-        ],
-    }
+    return created_tasks
 
 
 @router.post("/{task_id}/cancel", response_model=TaskResponse)
