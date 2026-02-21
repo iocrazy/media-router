@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from app.core.supabase import supabase_admin
 from app.core.auth import get_current_user
 from app.models.schemas import TaskCreate, TaskResponse
-from app.services import douyin
+from app.services.platforms import get_adapter
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -11,8 +11,8 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 async def publish_to_account(task_id: str, task_account_id: str, account: dict, video_url: str, title: str, description: str | None):
     """Background task to publish video to a single account."""
     try:
-        # Publish to Douyin
-        item_id = await douyin.publish_video(
+        adapter = get_adapter(account["platform"])
+        item_id = await adapter.publish_video(
             access_token=account["access_token"],
             open_id=account["platform_user_id"],
             video_url=video_url,

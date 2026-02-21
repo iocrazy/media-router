@@ -7,7 +7,7 @@ from app.core.supabase import supabase_admin
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.models.schemas import ShareSchemaResponse
-from app.services import douyin
+from app.services.platforms import get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,8 @@ async def get_share_schema(task_id: str, user_id: str = Depends(get_current_user
         title = f"{title} {task['description']}"
 
     # Generate Schema URL (signature is fresh each call)
-    schema_url = await douyin.generate_share_schema(
+    adapter = get_adapter("douyin")  # H5 share is Douyin-specific
+    schema_url = await adapter.generate_share_url(
         video_url=task["video_url"],
         title=title,
         share_id=share_id,
