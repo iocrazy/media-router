@@ -477,33 +477,45 @@ export default function Publish() {
       />
 
       {/* Fixed bottom bar */}
-      <div className="sticky bottom-0 bg-white border-t p-4 flex gap-3">
-        <button
-          type="button"
-          onClick={handleSaveDraft}
-          className="flex-1 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          保存到草稿
-        </button>
-        {isBatchVideo ? (
-          <button
-            type="button"
-            onClick={() => setShowBatchPreview(true)}
-            disabled={publishing || !isFormValid()}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            查看批量任务预览
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handlePublish}
-            disabled={publishing || !isFormValid()}
-            className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {publishing ? '提交中...' : '创建发布任务'}
-          </button>
+      <div className="sticky bottom-0 bg-white border-t p-4">
+        {!isFormValid() && !publishing && (
+          <p className="text-xs text-red-500 mb-2 text-center">
+            {!title.trim() ? '请填写标题' :
+             selectedIds.length === 0 ? '请选择至少一个发布账号' :
+             contentType === 'video' && videoFiles.filter(f => f.url).length === 0 ? '请上传视频文件' :
+             contentType === 'image_text' && imageUrls.length === 0 ? '请上传至少一张图片' :
+             contentType === 'article' && !articleContent.trim() ? '请填写文章内容' :
+             isScheduled && (!scheduledDate || !scheduledTime) ? '请设置定时发布时间' : ''}
+          </p>
         )}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="flex-1 py-3 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            保存到草稿
+          </button>
+          {isBatchVideo ? (
+            <button
+              type="button"
+              onClick={() => setShowBatchPreview(true)}
+              disabled={publishing || !isFormValid()}
+              className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              查看批量任务预览
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing || !isFormValid()}
+              className="flex-1 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {publishing ? '提交中...' : '创建发布任务'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* TopicPicker modal */}
