@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../services/api'
 import type { Account, Task, ContentType, Visibility, DistributionMode, AccountConfig, Draft } from '../services/api'
 import type { VideoFile } from '../components/publish/ContentUpload'
+import { supabase } from '../lib/supabase'
 import ContentUpload from '../components/publish/ContentUpload'
 import CoverUpload from '../components/publish/CoverUpload'
 import TitleInput from '../components/publish/TitleInput'
@@ -223,11 +224,36 @@ export default function Publish() {
   const [publishing, setPublishing] = useState(false)
   const [createdTasks, setCreatedTasks] = useState<Task[]>([])
 
+  const location = useLocation()
+
   // Load accounts and drafts on mount
   useEffect(() => {
     api.getAccounts().then(setAccounts).catch(console.error)
     api.getDrafts().then(setDrafts).catch(console.error)
   }, [])
+
+  // Accept video from Create page
+  useEffect(() => {
+    const state = location.state as { videoFile?: File; fromCreator?: boolean } | null
+    if (state?.fromCreator && state.videoFile) {
+      const file = state.videoFile
+      setContentType('video')
+      setStep('form')
+      setVideoFiles([{ file, name: file.name, url: null, uploading: true }])
+      // Upload the file
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`
+      supabase.storage.from('videos').upload(fileName, file).then(({ data, error }) => {
+        if (error) {
+          setVideoFiles([{ file, name: file.name, url: null, uploading: false }])
+          return
+        }
+        const { data: urlData } = supabase.storage.from('videos').getPublicUrl(data.path)
+        setVideoFiles([{ file, name: file.name, url: urlData.publicUrl, uploading: false }])
+      })
+      // Clear location state to prevent re-trigger
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
 
   const getScheduledISOString = (): string | undefined => {
     if (!isScheduled || !scheduledDate || !scheduledTime) return undefined

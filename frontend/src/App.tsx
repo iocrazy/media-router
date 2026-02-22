@@ -4,10 +4,9 @@ import { supabase } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 import Login from './pages/Login'
 import Accounts from './pages/Accounts'
+import Create from './pages/Create'
 import Publish from './pages/Publish'
 import Tasks from './pages/Tasks'
-import Videos from './pages/Videos'
-import Analytics from './pages/Analytics'
 
 function TabIcon({ name, active }: { name: string; active: boolean }) {
   const color = active ? '#2563EB' : '#9CA3AF'
@@ -24,16 +23,10 @@ function TabIcon({ name, active }: { name: string; active: boolean }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
         </svg>
       )
-    case 'videos':
+    case 'create':
       return (
         <svg className="w-5 h-5" fill="none" stroke={color} viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-        </svg>
-      )
-    case 'analytics':
-      return (
-        <svg className="w-5 h-5" fill="none" stroke={color} viewBox="0 0 24 24" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         </svg>
       )
     case 'tasks':
@@ -49,9 +42,8 @@ function TabIcon({ name, active }: { name: string; active: boolean }) {
 
 const tabItems = [
   { path: '/accounts', label: '账号', icon: 'accounts' },
-  { path: '/videos', label: '视频', icon: 'videos' },
+  { path: '/create', label: '创作', icon: 'create' },
   { path: '/publish', label: '发布', icon: 'publish' },
-  { path: '/analytics', label: '数据', icon: 'analytics' },
   { path: '/tasks', label: '记录', icon: 'tasks' },
 ]
 
@@ -171,6 +163,14 @@ function App() {
           }
         />
         <Route
+          path="/create"
+          element={
+            <ProtectedRoute>
+              <Create />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/publish"
           element={
             <ProtectedRoute>
@@ -183,22 +183,6 @@ function App() {
           element={
             <ProtectedRoute>
               <Tasks />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/videos"
-          element={
-            <ProtectedRoute>
-              <Videos />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/analytics"
-          element={
-            <ProtectedRoute>
-              <Analytics />
             </ProtectedRoute>
           }
         />
