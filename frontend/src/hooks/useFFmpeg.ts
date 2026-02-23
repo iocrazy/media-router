@@ -213,7 +213,7 @@ export function useFFmpeg() {
   )
 
   const applyFilter = useCallback(
-    async (inputFile: File, filterName: string): Promise<Blob | null> => {
+    async (inputFile: File, filterName: string, intensity: number = 1): Promise<Blob | null> => {
       const ext = getExtension(inputFile.name)
       const inputName = `input${ext}`
       const outputName = `output${ext}`
@@ -223,7 +223,17 @@ export function useFFmpeg() {
         warm: 'colortemperature=6500',
         cool: 'colortemperature=3500',
         vintage: 'curves=vintage',
-        vivid: 'eq=saturation=1.5:contrast=1.1',
+        vivid: `eq=saturation=${1 + 0.5 * intensity}:contrast=${1 + 0.1 * intensity}`,
+        soft: `gblur=sigma=${2 * intensity}`,
+        portrait: `eq=brightness=${0.05 * intensity}:saturation=${1 + 0.2 * intensity}`,
+        rosy: `colorbalance=rs=${0.3 * intensity}:gs=${-0.1 * intensity}:bs=${-0.1 * intensity}`,
+        fair: `eq=brightness=${0.1 * intensity}:gamma=${1 + 0.2 * intensity}`,
+        appetite: `colorbalance=rs=${0.2 * intensity}:gs=${0.1 * intensity}`,
+        fresh: `eq=saturation=${1 + 0.3 * intensity}:brightness=${0.05 * intensity}`,
+        golden: `colorbalance=rs=${0.2 * intensity}:gs=${0.15 * intensity}:bs=${-0.1 * intensity}`,
+        sunset: `colorbalance=rs=${0.4 * intensity}:gs=${0.1 * intensity}:bs=${-0.2 * intensity}`,
+        forest: `colorbalance=rs=${-0.1 * intensity}:gs=${0.3 * intensity}:bs=${0.1 * intensity}`,
+        ocean: `colorbalance=rs=${-0.1 * intensity}:gs=${0.1 * intensity}:bs=${0.3 * intensity}`,
       }
 
       const filterValue = filterMap[filterName]
@@ -302,6 +312,38 @@ export function useFFmpeg() {
     [getFFmpeg],
   )
 
+  const crop = useCallback(
+    async (
+      inputFile: File,
+      _aspectId: string,
+      ratio: number | null,
+    ): Promise<Blob | null> => {
+      const ext = getExtension(inputFile.name)
+      const inputName = `input${ext}`
+      const outputName = `output${ext}`
+
+      // If no ratio (free), use 9:16 as default
+      const r = ratio ?? 9 / 16
+
+      // Calculate crop dimensions based on target ratio
+      let cropFilter: string
+      if (r > 1) {
+        // Wider: crop height
+        cropFilter = `crop=iw:iw/${r.toFixed(4)}:0:(ih-iw/${r.toFixed(4)})/2`
+      } else {
+        // Taller or square: crop width
+        cropFilter = `crop=ih*${r.toFixed(4)}:ih:(iw-ih*${r.toFixed(4)})/2:0`
+      }
+
+      return runOperation(inputFile, inputName, outputName, [
+        '-i', inputName,
+        '-vf', cropFilter,
+        outputName,
+      ])
+    },
+    [runOperation],
+  )
+
   return {
     status,
     progress,
@@ -311,5 +353,6 @@ export function useFFmpeg() {
     addText,
     applyFilter,
     concat,
+    crop,
   }
 }

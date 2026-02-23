@@ -2,21 +2,30 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFFmpeg } from '../hooks/useFFmpeg'
 import VideoPreview from '../components/creator/VideoPreview'
+import VideoCanvas from '../components/creator/VideoCanvas'
 import TrimSlider from '../components/creator/TrimSlider'
 import ToolBar from '../components/creator/ToolBar'
 import type { ToolType } from '../components/creator/ToolBar'
+import TemplatePicker from '../components/creator/TemplatePicker'
 import TrimPanel from '../components/creator/panels/TrimPanel'
 import SpeedPanel from '../components/creator/panels/SpeedPanel'
 import TextPanel from '../components/creator/panels/TextPanel'
 import FilterPanel from '../components/creator/panels/FilterPanel'
 import ConcatPanel from '../components/creator/panels/ConcatPanel'
+import CropPanel from '../components/creator/panels/CropPanel'
+import MusicPanel from '../components/creator/panels/MusicPanel'
+import StickerPanel from '../components/creator/panels/StickerPanel'
 import ExportButton from '../components/creator/ExportButton'
 import EditorLoading from '../components/creator/EditorLoading'
+import AiCreator from '../components/creator/ai/AiCreator'
+
+type PageMode = 'picker' | 'editor' | 'ai'
 
 export default function Create() {
   const navigate = useNavigate()
-  const { status, progress, load, trim, changeSpeed, addText, applyFilter, concat } = useFFmpeg()
+  const { status, progress, load, trim, changeSpeed, addText, applyFilter, concat, crop } = useFFmpeg()
 
+  const [mode, setMode] = useState<PageMode>('picker')
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [duration, setDuration] = useState(0)
@@ -51,16 +60,6 @@ export default function Create() {
     setTrimEnd(d)
   }, [])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSourceFile(file)
-      setConcatFiles([file])
-      setTrimStart(0)
-      setSpeed(1)
-    }
-  }
-
   const updateSourceFromBlob = (blob: Blob) => {
     const file = new File([blob], sourceFile?.name || 'edited.mp4', { type: 'video/mp4' })
     setSourceFile(file)
@@ -81,15 +80,15 @@ export default function Create() {
     if (blob) updateSourceFromBlob(blob)
   }
 
-  const handleTextApply = async (text: string, fontSize: number, color: string) => {
+  const handleTextApply = async (text: string, fontSize: number, color: string, _styleId: string) => {
     if (!sourceFile) return
     const blob = await addText(sourceFile, text, fontSize, color)
     if (blob) updateSourceFromBlob(blob)
   }
 
-  const handleFilterApply = async (filterName: string) => {
+  const handleFilterApply = async (filterName: string, intensity: number) => {
     if (!sourceFile) return
-    const blob = await applyFilter(sourceFile, filterName)
+    const blob = await applyFilter(sourceFile, filterName, intensity)
     if (blob) updateSourceFromBlob(blob)
   }
 
@@ -99,41 +98,116 @@ export default function Create() {
     if (blob) updateSourceFromBlob(blob)
   }
 
+  const handleCropApply = async (aspectId: string, ratio: number | null) => {
+    if (!sourceFile) return
+    const blob = await crop(sourceFile, aspectId, ratio)
+    if (blob) updateSourceFromBlob(blob)
+  }
+
+  const handleMusicApply = async (_trackId: string, _musicVolume: number, _originalVolume: number) => {
+    // Music overlay is display-only for now
+    alert('音乐已添加（演示模式）')
+  }
+
+  const handleStickerSelect = (_emoji: string) => {
+    // Switch to canvas mode to place sticker
+    setActiveTool('canvas')
+  }
+
   const handleExport = () => {
     if (!sourceFile) return
     navigate('/publish', { state: { videoFile: sourceFile, fromCreator: true } })
   }
 
+  // Template handler
+  const handleTemplateSelect = (_templateId: string) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/*'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (file) {
+        setSourceFile(file)
+        setConcatFiles([file])
+        setMode('editor')
+      }
+    }
+    input.click()
+  }
+
+  const handleFreeEdit = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/*'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (file) {
+        setSourceFile(file)
+        setConcatFiles([file])
+        setMode('editor')
+      }
+    }
+    input.click()
+  }
+
+  // FFmpeg loading state
   if (status === 'loading' || status === 'error') {
     return <EditorLoading status={status === 'loading' ? 'loading' : 'error'} onRetry={load} />
   }
 
+  // AI Creator mode
+  if (mode === 'ai') {
+    return (
+      <AiCreator
+        onBack={() => setMode('picker')}
+        onUseResult={() => setMode('picker')}
+      />
+    )
+  }
+
+  // Template picker mode
+  if (mode === 'picker') {
+    return (
+      <TemplatePicker
+        onSelect={handleTemplateSelect}
+        onFreeEdit={handleFreeEdit}
+        onAiCreate={() => setMode('ai')}
+      />
+    )
+  }
+
+  // Editor mode
   return (
     <div className="space-y-3 -mx-4">
-      {/* Video preview or file picker */}
+      {/* Back button */}
       <div className="px-4">
-        {!sourceFile ? (
-          <label className="flex flex-col items-center justify-center h-64 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-50">
-            <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            <span className="text-sm text-gray-500">选择视频文件</span>
-            <span className="text-xs text-gray-400 mt-1">支持 MP4、MOV、AVI 格式</span>
-            <input type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
-          </label>
-        ) : (
-          <VideoPreview
-            src={videoUrl}
-            trimStart={activeTool === 'trim' ? trimStart : undefined}
-            trimEnd={activeTool === 'trim' ? trimEnd : undefined}
-            onDurationChange={handleDurationChange}
-          />
+        <button
+          onClick={() => { setMode('picker'); setSourceFile(null); setActiveTool(null) }}
+          className="text-sm text-gray-400 hover:text-gray-600"
+        >
+          ← 返回选择
+        </button>
+      </div>
+
+      {/* Video preview */}
+      <div className="px-4 relative">
+        <VideoPreview
+          src={videoUrl}
+          trimStart={activeTool === 'trim' ? trimStart : undefined}
+          trimEnd={activeTool === 'trim' ? trimEnd : undefined}
+          onDurationChange={handleDurationChange}
+        />
+        {/* Canvas overlay */}
+        {activeTool === 'canvas' && (
+          <div className="absolute inset-0">
+            <VideoCanvas width={343} height={193} />
+          </div>
         )}
       </div>
 
       {sourceFile && (
         <>
-          {/* Trim slider (visible when trim tool is active) */}
+          {/* Trim slider */}
           {activeTool === 'trim' && (
             <TrimSlider
               duration={duration}
@@ -187,6 +261,23 @@ export default function Create() {
               onRemove={(i) => setConcatFiles((prev) => prev.filter((_, idx) => idx !== i))}
               processing={status === 'processing'}
               onApply={handleConcatApply}
+            />
+          )}
+          {activeTool === 'crop' && (
+            <CropPanel
+              processing={status === 'processing'}
+              onApply={handleCropApply}
+            />
+          )}
+          {activeTool === 'music' && (
+            <MusicPanel
+              processing={status === 'processing'}
+              onApply={handleMusicApply}
+            />
+          )}
+          {activeTool === 'sticker' && (
+            <StickerPanel
+              onSelect={handleStickerSelect}
             />
           )}
 

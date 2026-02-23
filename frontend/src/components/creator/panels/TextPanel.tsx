@@ -1,82 +1,113 @@
-import { useState } from 'react';
+import { useState } from 'react'
 
-interface TextPanelProps {
-  processing: boolean;
-  onApply: (text: string, fontSize: number, color: string) => void;
+interface SubtitleStyle {
+  id: string
+  label: string
+  preview: string
+  fontColor: string
+  strokeColor?: string
+  bgColor?: string
 }
 
-const FONT_SIZES = [24, 32, 48, 64];
+const subtitleStyles: SubtitleStyle[] = [
+  { id: 'classic', label: '经典白字', preview: '白底黑边', fontColor: '#FFFFFF', strokeColor: '#000000' },
+  { id: 'rainbow', label: '彩虹字', preview: '渐变彩色', fontColor: '#FF6B6B' },
+  { id: 'bubble', label: '气泡框', preview: '圆角背景', fontColor: '#333333', bgColor: '#FFFFFF' },
+  { id: 'neon', label: '霓虹灯', preview: '发光效果', fontColor: '#00FF88', strokeColor: '#00CC66' },
+  { id: 'typewriter', label: '打字机', preview: '等宽字体', fontColor: '#F5F5DC' },
+  { id: 'danmu', label: '弹幕风', preview: '滚动字幕', fontColor: '#FFFFFF', bgColor: 'rgba(0,0,0,0.5)' },
+]
 
-const COLORS = [
-  { id: 'white', value: '#ffffff', bg: 'bg-white border border-gray-300' },
-  { id: 'yellow', value: '#facc15', bg: 'bg-yellow-400' },
-  { id: 'red', value: '#ef4444', bg: 'bg-red-500' },
-  { id: 'cyan', value: '#06b6d4', bg: 'bg-cyan-500' },
-  { id: 'lime', value: '#84cc16', bg: 'bg-lime-500' },
-];
+const fontSizes = [24, 32, 48, 64]
+
+interface TextPanelProps {
+  processing: boolean
+  onApply: (text: string, fontSize: number, color: string, styleId: string) => void
+}
 
 export default function TextPanel({ processing, onApply }: TextPanelProps) {
-  const [text, setText] = useState('');
-  const [fontSize, setFontSize] = useState(32);
-  const [color, setColor] = useState('#ffffff');
+  const [text, setText] = useState('')
+  const [fontSize, setFontSize] = useState(32)
+  const [selectedStyle, setSelectedStyle] = useState('classic')
+
+  const style = subtitleStyles.find((s) => s.id === selectedStyle)!
 
   return (
-    <div className="space-y-4 rounded-xl bg-gray-50 p-4">
+    <div className="px-4 space-y-3">
       {/* Text input */}
-      <input
-        type="text"
-        value={text}
-        onChange={(e) => setText(e.target.value.slice(0, 50))}
-        maxLength={50}
-        placeholder="输入文字内容..."
-        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-      />
-      <div className="text-right text-xs text-gray-400">{text.length}/50</div>
+      <div>
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value.slice(0, 50))}
+          placeholder="输入文字内容..."
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+        />
+        <p className="text-xs text-gray-400 mt-1 text-right">{text.length}/50</p>
+      </div>
 
-      {/* Font size */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 shrink-0">字号</span>
-        <div className="flex gap-2">
-          {FONT_SIZES.map((s) => (
+      {/* Subtitle style grid */}
+      <div>
+        <p className="text-xs text-gray-500 mb-2">字幕样式</p>
+        <div className="grid grid-cols-3 gap-2">
+          {subtitleStyles.map((s) => (
             <button
-              key={s}
-              onClick={() => setFontSize(s)}
-              className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                fontSize === s
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200'
+              key={s.id}
+              onClick={() => setSelectedStyle(s.id)}
+              className={`p-3 rounded-lg border-2 text-center transition-colors ${
+                selectedStyle === s.id
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200'
               }`}
             >
-              {s}
+              <div
+                className="text-sm font-bold mb-1 truncate"
+                style={{
+                  color: s.fontColor,
+                  textShadow: s.strokeColor
+                    ? `1px 1px 0 ${s.strokeColor}, -1px -1px 0 ${s.strokeColor}, 1px -1px 0 ${s.strokeColor}, -1px 1px 0 ${s.strokeColor}`
+                    : undefined,
+                  backgroundColor: s.bgColor || 'transparent',
+                  padding: s.bgColor ? '2px 6px' : undefined,
+                  borderRadius: s.bgColor ? '4px' : undefined,
+                }}
+              >
+                示例
+              </div>
+              <span className="text-xs text-gray-600">{s.label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Color picker */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-gray-500 shrink-0">颜色</span>
+      {/* Font size */}
+      <div>
+        <p className="text-xs text-gray-500 mb-2">字号</p>
         <div className="flex gap-2">
-          {COLORS.map((c) => (
+          {fontSizes.map((size) => (
             <button
-              key={c.id}
-              onClick={() => setColor(c.value)}
-              className={`h-7 w-7 rounded-full ${c.bg} ${
-                color === c.value ? 'ring-2 ring-blue-600 ring-offset-2' : ''
+              key={size}
+              onClick={() => setFontSize(size)}
+              className={`flex-1 py-2 rounded-lg text-sm ${
+                fontSize === size
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700'
               }`}
-            />
+            >
+              {size}
+            </button>
           ))}
         </div>
       </div>
 
       {/* Apply */}
       <button
-        onClick={() => onApply(text, fontSize, color)}
-        disabled={processing || text.trim().length === 0}
-        className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+        onClick={() => text && onApply(text, fontSize, style.fontColor, selectedStyle)}
+        disabled={!text.trim() || processing}
+        className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
       >
         {processing ? '处理中...' : '添加文字'}
       </button>
     </div>
-  );
+  )
 }
